@@ -1,7 +1,7 @@
 //******************************************************************************
 //	--Mike McConville--
 //
-//	This file is the to be used for a Slave MSP430 talking to a Master MSP430
+//	This file is to be used for a Slave MSP430 talking to a Master MSP430
 //	via I2C in both write and read modes. This file is the slave portion of
 //	the code. This code also obtains ADC measurements, handles IO pins, timers,
 //  and a control structure of the code that is to be used on the slave side
