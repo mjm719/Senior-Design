@@ -90,9 +90,8 @@ int main(void)
 	UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 	IE2 |= UCA0RXIE;                          // Enable USCI_A0 RX interrupt
 	while (1){
-	__bis_SR_register(LPM0_bits + GIE);       // Enter LPM0, interrupts enabled
-
-	P1OUT ^= BIT0;
+		__bis_SR_register(LPM0_bits + GIE);       // Enter LPM0, interrupts enabled
+		P1OUT ^= BIT0;
 	}
 }
 
@@ -104,7 +103,8 @@ __interrupt void USCI0RX_ISR(void)
 void __attribute__ ((interrupt(USCIAB0RX_VECTOR))) USCI0RX_ISR (void)
 #else
 #error Compiler not supported!
-#endif {
+#endif
+{
 	while (!(IFG2&UCA0TXIFG));		// USCI_A0 TX buffer ready?
 	UCA0TXBUF ='C';                    // TX -> RXed character
 	IFG2 &= ~UCA0RXIFG;				//Manually turn receive flag off. Most important bitch in this code

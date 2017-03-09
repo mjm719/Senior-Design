@@ -51,6 +51,9 @@ unsigned char StatusByte;			//Status Information to be sent back to the user's A
 //StatusByte Flags / Bits of StatusByte
 const unsigned char SensorFailure = 1;
 
+//*************************************************************************************//
+//IMPORTANT TESTING NOTICE: All VirtualBench Data has been shifted right once
+//*************************************************************************************//
 
 unsigned char TXByteCtr;			//Variable to determine how many more bytes of data you have left to send
 unsigned char RXByteCtr;			//Variable to determine how many more bytes of data you have left to read
@@ -81,11 +84,11 @@ int main(void){
 	//Initialize Pins to be used
 	P1SEL |= BIT6 + BIT7;                     //Assign I2C pins to USCI_B0, P1.6 is clock line, P1.7 is data line
 	P1SEL2|= BIT6 + BIT7;                     //Assign I2C pins to USCI_B0
-	P1SEL = BIT1 + BIT2 + BIT4;               //P1.1 = RXD, P1.2=TXD
-	P1SEL2 = BIT1 + BIT2;                     //P1.4 = SMCLK, others GPIO
+	//P1SEL = BIT1 + BIT2 + BIT4;               //P1.1 = RXD, P1.2=TXD
+	//P1SEL2 = BIT1 + BIT2;                     //P1.4 = SMCLK, others GPIO
 
 	//Set the device up for UART
-	SetupUART();
+	//SetupUART();
 
 	P1OUT &= ~BIT0;                           // P1.0 = 0
 	P1DIR |= BIT0;                            // P1.0 output
@@ -97,8 +100,8 @@ int main(void){
 	//unsigned char x = 1;
 	while (1){
 
-		UC0IE |= UCA0TXIE; // Enable USCI_A0 TX interrupt
-/*
+		//UC0IE |= UCA0TXIE; // Enable USCI_A0 TX interrupt
+		__delay_cycles(1000);
 		// Read the value of the current tire pressure from the pressure sensor
 		SetupPressureRX();
 	    while (UCB0CTL1 & UCTXSTP);             //Check to see if the line is currently open
@@ -106,6 +109,7 @@ int main(void){
 												//UCTXSTT also sends the address that is currently being stored in UCB0I2CSA, which starts the communication and reserves the line
 	    while (UCB0CTL1 & UCTXSTT);             //Check to see if the master and slave have opened the I2C line for communication
 	    UCB0CTL1 |= UCTXSTP;                    //Send a stop condition and wait for the slave that was addressed to respond with the data you want to read
+	    //__bis_SR_register(CPUOFF + GIE);      //Enter LPM0 w/ interrupts
 
 	    //Store Data into variables for use
 	    PressureData0 = PressureRX[0];			//
@@ -120,13 +124,9 @@ int main(void){
 	    	//Need to determine if we want to convert the data before sending to BlueTooth or not
 	    	//TXData = ;
 	    }
-*/
-	    //__bis_SR_register(CPUOFF + GIE);      //Enter LPM0 w/ interrupts
 	    //__bis_SR_register(CPUOFF + GIE);      //Enter low power mode and wait for an interrupt, interrupts will still be serviced
 												//Remain in LPM0 until all data
 												//is TX'd
-		__bis_SR_register(LPM4_bits + GIE);
-		x = 0;
 	}
 }
 
@@ -150,6 +150,7 @@ void __attribute__ ((interrupt(USCIAB0TX_VECTOR))) USCIAB0TX_ISR (void)			//Inte
 			if (RXByteCtr == 1){                    //Only one byte left?
 			  UCB0CTL1 |= UCTXSTP;                  //Generate I2C stop condition
 			}
+			IFG2 |= UCB0RXIFG;
 		}
 		else{
 			*PPressureRX = UCB0RXBUF;               //Move final RX data to PPressureRX
