@@ -78,8 +78,9 @@ PIN_Config ledPinTable[] = {
 Void echoFxn(UArg arg0, UArg arg1)
 {
     char input[4] = {0};
-    char output[] = {'C'};
+    char output[] = {'C','d','E','f'};
     int num_bytes =0;
+    int inc = 0;
     int len = (sizeof(input)/sizeof(char));
     UART_Handle uart;
     UART_Params uartParams;
@@ -113,15 +114,20 @@ Void echoFxn(UArg arg0, UArg arg1)
             {
                 printf("Error reading from MSP430\n");
             }
-            printf("Data from MSP430: %c\n",input[0]);
+
         }
-        if(num_bytes = UART_write(uart, output, len))
+        for(inc = 0; inc <=3 ; inc++)
+        {
+            printf("Data from MSP430: %c\n",input[inc]);
+        }
+        if(num_bytes= UART_write(uart, input, len))
         {
             if(num_bytes == UART_ERROR)
-            {
-                printf("Error reading from MSP430\n");
-            }
+                {
+                    printf("Error writing to MSP430\n");
+                }
         }
+
 
 
     }
