@@ -7,7 +7,7 @@ using System.Threading;
 using System.Collections.Generic;
 using System.Resources;
 
-namespace BPR
+namespace Main
 {
     [Activity(Label = "BPR", MainLauncher = true, Icon = "@drawable/icon")]
     public class MainActivity : Activity
