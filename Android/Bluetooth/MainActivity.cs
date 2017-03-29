@@ -11,7 +11,7 @@ using System.IO;
 using System.Reflection;
 using System.Timers;
 
-namespace BluetoothTestingv2
+namespace Bluetooth
 {
     public static class Constants
     {
@@ -259,7 +259,7 @@ namespace BluetoothTestingv2
             try
             {
                 // MY_UUID is the app's UUID string, also used by the client code.
-                // tmp = mBluetoothAdapter.ListenUsingRfcommWithServiceRecord(Constants.NAME, Constants.UUID);
+                tmp = mBluetoothAdapter.ListenUsingRfcommWithServiceRecord(Constants.NAME, Constants.UUID);
             }
             catch { }
 
@@ -273,16 +273,10 @@ namespace BluetoothTestingv2
             // Keep listening until exception occurs or a socket is returned.
             debugText.Text += "Listening for socket...\n";
 
-            ;
-
             while (true)
             {
-                ;
-
                 try
                 {
-                    ;
-                    
                     socket = mmServerSocket.Accept();
                 }
                 catch
@@ -296,7 +290,7 @@ namespace BluetoothTestingv2
                     // A connection was accepted. Perform work associated with the connection in a separate thread.
                     debugText.Text += "Connection was accepted.\n";
 
-                    // manageMyConnectedSocket(mmSocket);
+                    // Manage the connected socket.
 
                     debugText.Text += "Closing the socket...\n";
                     mmServerSocket.Close();
@@ -338,7 +332,6 @@ namespace BluetoothTestingv2
             try
             {
                 // Get a BluetoothSocket to connect with the given BluetoothDevice.
-                // MY_UUID is the app's UUID string, also used in the server code.
                 tmp = device.CreateRfcommSocketToServiceRecord(Constants.UUID);
             }
             catch { };
@@ -357,7 +350,7 @@ namespace BluetoothTestingv2
                 // Connect to the remote device through the socket. This call blocks until it succeeds or throws an exception.
                 debugText.Text += "Attempting to connect to device through the socket...\n";
 
-                mmSocket.ConnectAsync();
+                mmSocket.Connect();
             }
             catch (IOException e)
             {
@@ -380,7 +373,7 @@ namespace BluetoothTestingv2
             // The connection attempt succeeded. Perform work associated with the connection in a separate thread.
             debugText.Text += "Connection succeeded.\n";
 
-            // manageMyConnectedSocket(mmSocket);
+            // Manage the connected socket.
         }
 
         // Closes the client socket and causes the thread to finish.
