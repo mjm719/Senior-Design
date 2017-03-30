@@ -1,2 +1,0 @@
-android.app.Application
-BluetoothTestingv2.BluetoothTestingv2
