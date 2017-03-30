@@ -68,24 +68,17 @@ namespace Main
             BluetoothAdapter adapter = BluetoothAdapter.DefaultAdapter;
             if (adapter == null)
                 throw new System.ArgumentException("No Bluetooth adapter found.");
-
             if (!adapter.IsEnabled)
                 throw new System.ArgumentException("Bluetooth adapter is not enabled.");
-
-
             BluetoothDevice device = (from bd in adapter.BondedDevices
                                       where bd.Name == "NameOfTheDevice"
                                       select bd).FirstOrDefault();
-
             if (device == null)
                 throw new System.ArgumentException("Named device not found.");
-
             BluetoothSocket _socket = device.CreateRfcommSocketToServiceRecord(UUID.FromString("00001101-0000-1000-8000-00805f9b34fb"));
             await _socket.ConnectAsync();
-
             // Read data from the device
             await _socket.InputStream.ReadAsync(buffer, 0, buffer.Length);
-
             // Write data to the device
             await _socket.OutputStream.WriteAsync(buffer, 0, buffer.Length);
             */
@@ -154,7 +147,7 @@ namespace Main
 
             addButton = new ImageButton(this);
             layout.AddView(addButton);
-            addButton.SetBackgroundResource(Resources.GetIdentifier("icon_add2_white", "drawable", PackageName));
+            addButton.SetBackgroundResource(Resources.GetIdentifier("icon_add", "drawable", PackageName));
             addButton.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.05);
             addButton.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.05);
             addButton.Click += AddButtonClick;
@@ -190,7 +183,7 @@ namespace Main
 
             backButton = new ImageButton(this);
             editPressureTextLayout1.AddView(backButton);
-            backButton.SetBackgroundResource(Resources.GetIdentifier("icon_back2_white", "drawable", PackageName));
+            backButton.SetBackgroundResource(Resources.GetIdentifier("icon_back", "drawable", PackageName));
             backButton.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.04);
             backButton.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.04);
             backButton.Click += BackButtonClick;
@@ -758,7 +751,7 @@ namespace Main
             editButton.Tag = "Edit Button " + index.ToString();
             layout.AddView(editButton);
 
-            editButton.SetBackgroundResource(Resources.GetIdentifier("icon_edit2_white", "drawable", PackageName));
+            editButton.SetBackgroundResource(Resources.GetIdentifier("icon_edit", "drawable", PackageName));
 
             editButton.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.05);
             editButton.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.05);
@@ -774,7 +767,7 @@ namespace Main
             deleteButton.Tag = "Delete Button " + index.ToString();
             layout.AddView(deleteButton);
 
-            deleteButton.SetBackgroundResource(Resources.GetIdentifier("icon_delete3_white", "drawable", PackageName));
+            deleteButton.SetBackgroundResource(Resources.GetIdentifier("icon_delete", "drawable", PackageName));
 
             deleteButton.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.04);
             deleteButton.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.04);
@@ -795,4 +788,3 @@ namespace Main
         }
     }
 }
-
