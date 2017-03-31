@@ -74,4 +74,3 @@ C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Bluet
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\obj\Debug\android\assets\System.Xml.dll.mdb
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\obj\Debug\android\assets\System.Xml.Linq.dll.mdb
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\obj\Debug\BluetoothLE.dll.mdb
-C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\bin\Debug\BluetoothLE.dll.mdb

@@ -18,6 +18,22 @@ namespace BluetoothLE
     public static class Constants
     {
         public const int REQUEST_ENABLE_BT = 1;
+
+        public const string ACTION_GATT_CONNECTED = 
+            "com.example.bluetooth.le.ACTION_GATT_CONNECTED";
+        public const string ACTION_GATT_DISCONNECTED = 
+            "com.example.bluetooth.le.ACTION_GATT_DISCONNECTED";
+        public const string ACTION_GATT_SERVICES_DISCOVERED =
+            "com.example.bluetooth.le.ACTION_GATT_SERVICES_DISCOVERED";
+        public const string ACTION_DATA_AVAILABLE =
+            "com.example.bluetooth.le.ACTION_DATA_AVAILABLE";
+        public const string EXTRA_DATA =
+            "com.example.bluetooth.le.EXTRA_DATA";
+
+        public const int STATE_DISCONNECTED = 0;
+        public const int STATE_CONNECTING = 1;
+        public const int STATE_CONNECTED = 2;
+        public const int STATE_DISCONNECTING = 3;
     }
 
     [Activity(Label = "Bluetooth LE Testing", MainLauncher = true, Icon = "@drawable/icon")]
@@ -150,6 +166,8 @@ namespace BluetoothLE
                     
                     debugText.Text += "Cancelling discovery...\n";
                     mBluetoothAdapter.CancelDiscovery();
+
+                    
                 }
             }
 
@@ -167,6 +185,92 @@ namespace BluetoothLE
                     debugText.Text += "Device was not found.\n";
                 }
             }
+        }
+
+        public void ConnectLE(BluetoothDevice device)
+        {
+            //BluetoothGattCallback mGattCallback = new BluetoothGattCallback();
+            //device.ConnectGatt(this, false, mGattCallback);
+        }
+    }
+
+    public class BluetoothLeService : Service
+    {
+        // private static string TAG = BluetoothLeService.class.getSimpleName();
+
+        private BluetoothManager mBluetoothManager;
+        private BluetoothAdapter mBluetoothAdapter;
+        private string mBluetoothDeviceAddress;
+        private BluetoothGatt mBluetoothGatt;
+        private int mConnectionState = Constants.STATE_DISCONNECTED;
+
+        // public static UUID UUID_HEART_RATE_MEASUREMENT = UUID.FromString(SampleGattAttributes.HEART_RATE_MEASUREMENT);
+
+        private GattCallback mGattCallback = new GattCallback();
+    }
+
+    public class GattCallback : BluetoothGattCallback
+    {
+        public int mConnetionState { get; set; }
+
+        public override void OnConnectionStateChange(BluetoothGatt gatt, GattStatus status, ProfileState newState)
+        {
+            base.OnConnectionStateChange(gatt, status, newState);
+
+            string intentAction;
+
+            if (newState == ProfileState.Connected)
+            {
+                intentAction = Constants.ACTION_GATT_CONNECTED;
+                mConnetionState = Constants.STATE_CONNECTED;
+                broadcastUpdate(intentAction);
+                // Connected to GATT server.
+                // Attempting to start service discovery: mBluetoothGatt.discoverServices()
+            }
+            else if (newState == ProfileState.Disconnected)
+            {
+                intentAction = Constants.ACTION_GATT_DISCONNECTED;
+                mConnetionState = Constants.STATE_CONNECTED;
+                // Disconnected from GATT server.
+                broadcastUpdate(intentAction);
+            }
+        }
+
+        public override void OnServicesDiscovered(BluetoothGatt gatt, GattStatus status)
+        {
+            base.OnServicesDiscovered(gatt, status);
+
+            if (status == GattStatus.Success)
+            {
+                broadcastUpdate(Constants.ACTION_GATT_SERVICES_DISCOVERED);
+            }
+            else
+            {
+                // onServicesDiscovered received: status
+            }
+        }
+
+        public override void OnCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, GattStatus status)
+        {
+            base.OnCharacteristicRead(gatt, characteristic, status);
+
+            if (status == GattStatus.Success)
+            {
+                broadcastUpdate(Constants.ACTION_DATA_AVAILABLE, characteristic);
+            }
+        }
+
+        private void broadcastUpdate(string action)
+        {
+            Intent intent = new Intent(action);
+            //sendBroadcast(intent);
+        }
+
+        private void broadcastUpdate(string action, BluetoothGattCharacteristic characteristic)
+        {
+            Intent intent = new Intent(action);
+
+            // Special handling goes here.
         }
     }
 }
