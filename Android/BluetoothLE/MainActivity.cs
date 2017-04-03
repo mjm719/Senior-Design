@@ -18,22 +18,6 @@ namespace BluetoothLE
     public static class Constants
     {
         public const int REQUEST_ENABLE_BT = 1;
-
-        public const string ACTION_GATT_CONNECTED = 
-            "com.example.bluetooth.le.ACTION_GATT_CONNECTED";
-        public const string ACTION_GATT_DISCONNECTED = 
-            "com.example.bluetooth.le.ACTION_GATT_DISCONNECTED";
-        public const string ACTION_GATT_SERVICES_DISCOVERED =
-            "com.example.bluetooth.le.ACTION_GATT_SERVICES_DISCOVERED";
-        public const string ACTION_DATA_AVAILABLE =
-            "com.example.bluetooth.le.ACTION_DATA_AVAILABLE";
-        public const string EXTRA_DATA =
-            "com.example.bluetooth.le.EXTRA_DATA";
-
-        public const int STATE_DISCONNECTED = 0;
-        public const int STATE_CONNECTING = 1;
-        public const int STATE_CONNECTED = 2;
-        public const int STATE_DISCONNECTING = 3;
     }
 
     [Activity(Label = "Bluetooth LE Testing", MainLauncher = true, Icon = "@drawable/icon")]
@@ -145,6 +129,8 @@ namespace BluetoothLE
         private string btAddress = "CC:78:AB:83:3C:06";
         private bool found = false;
 
+        private GattCallback mGattCallback;
+
         public override void OnReceive(Context context, Intent intent)
         {
             string action = intent.Action;
@@ -167,7 +153,7 @@ namespace BluetoothLE
                     debugText.Text += "Cancelling discovery...\n";
                     mBluetoothAdapter.CancelDiscovery();
 
-                    
+                    mGattCallback = new GattCallback();
                 }
             }
 
@@ -186,32 +172,51 @@ namespace BluetoothLE
                 }
             }
         }
-
-        public void ConnectLE(BluetoothDevice device)
-        {
-            //BluetoothGattCallback mGattCallback = new BluetoothGattCallback();
-            //device.ConnectGatt(this, false, mGattCallback);
-        }
     }
 
     public class BluetoothLeService : Service
     {
-        // private static string TAG = BluetoothLeService.class.getSimpleName();
+        public const string ACTION_GATT_CONNECTED =
+            "com.example.bluetooth.le.ACTION_GATT_CONNECTED";
+        public const string ACTION_GATT_DISCONNECTED =
+            "com.example.bluetooth.le.ACTION_GATT_DISCONNECTED";
+        public const string ACTION_GATT_SERVICES_DISCOVERED =
+            "com.example.bluetooth.le.ACTION_GATT_SERVICES_DISCOVERED";
+        public const string ACTION_DATA_AVAILABLE =
+            "com.example.bluetooth.le.ACTION_DATA_AVAILABLE";
+        public const string EXTRA_DATA =
+            "com.example.bluetooth.le.EXTRA_DATA";
 
-        private BluetoothManager mBluetoothManager;
-        private BluetoothAdapter mBluetoothAdapter;
-        private string mBluetoothDeviceAddress;
-        private BluetoothGatt mBluetoothGatt;
-        private int mConnectionState = Constants.STATE_DISCONNECTED;
+        public const int STATE_DISCONNECTED = 0;
+        public const int STATE_CONNECTING = 1;
+        public const int STATE_CONNECTED = 2;
+        public const int STATE_DISCONNECTING = 3;
 
-        // public static UUID UUID_HEART_RATE_MEASUREMENT = UUID.FromString(SampleGattAttributes.HEART_RATE_MEASUREMENT);
+        private IBinder mBinder = new LocalBinder();
 
-        private GattCallback mGattCallback = new GattCallback();
+        public override IBinder OnBind(Intent intent)
+        {
+            return mBinder;
+        }
     }
 
+    public class LocalBinder : Android.OS.Binder
+    {
+        BluetoothLeService GetService()
+        {
+            return (BluetoothLeService)BluetoothLeService.BluetoothService;
+        }
+    }
+
+    // Various callback methods defined by the BLE API.
     public class GattCallback : BluetoothGattCallback
     {
-        public int mConnetionState { get; set; }
+        public BluetoothManager mBluetoothManager { get; set; }
+        public BluetoothAdapter mBluetoothAdapter { get; set; }
+        public string mBluetoothDeviceAddress { get; set; }
+        public BluetoothGatt mBluetoothGatt { get; set; }
+
+        public int mConnectionState = BluetoothLeService.STATE_DISCONNECTED;
 
         public override void OnConnectionStateChange(BluetoothGatt gatt, GattStatus status, ProfileState newState)
         {
@@ -221,49 +226,55 @@ namespace BluetoothLE
 
             if (newState == ProfileState.Connected)
             {
-                intentAction = Constants.ACTION_GATT_CONNECTED;
-                mConnetionState = Constants.STATE_CONNECTED;
+                intentAction = BluetoothLeService.ACTION_GATT_CONNECTED;
+                mConnectionState = BluetoothLeService.STATE_CONNECTED;
                 broadcastUpdate(intentAction);
                 // Connected to GATT server.
-                // Attempting to start service discovery: mBluetoothGatt.discoverServices()
+                // Attempting to start service discovery...
+                mBluetoothGatt.DiscoverServices();
+                
             }
             else if (newState == ProfileState.Disconnected)
             {
-                intentAction = Constants.ACTION_GATT_DISCONNECTED;
-                mConnetionState = Constants.STATE_CONNECTED;
+                intentAction = BluetoothLeService.ACTION_GATT_DISCONNECTED;
+                mConnectionState = BluetoothLeService.STATE_CONNECTED;
                 // Disconnected from GATT server.
                 broadcastUpdate(intentAction);
             }
         }
 
+        // New services discovered.
         public override void OnServicesDiscovered(BluetoothGatt gatt, GattStatus status)
         {
             base.OnServicesDiscovered(gatt, status);
 
             if (status == GattStatus.Success)
             {
-                broadcastUpdate(Constants.ACTION_GATT_SERVICES_DISCOVERED);
+                broadcastUpdate(BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED);
             }
             else
             {
-                // onServicesDiscovered received: status
+                // onServicesDiscovered received.
             }
         }
 
+        // Result of a characteristic read operation.
         public override void OnCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, GattStatus status)
         {
             base.OnCharacteristicRead(gatt, characteristic, status);
 
             if (status == GattStatus.Success)
             {
-                broadcastUpdate(Constants.ACTION_DATA_AVAILABLE, characteristic);
+                broadcastUpdate(BluetoothLeService.ACTION_DATA_AVAILABLE, characteristic);
             }
         }
 
         private void broadcastUpdate(string action)
         {
             Intent intent = new Intent(action);
-            //sendBroadcast(intent);
+
+            // Send broadcast.
+            ;
         }
 
         private void broadcastUpdate(string action, BluetoothGattCharacteristic characteristic)
@@ -271,6 +282,51 @@ namespace BluetoothLE
             Intent intent = new Intent(action);
 
             // Special handling goes here.
+            ;
+
+            // Send broadcast.
+            ;
+        }
+    }
+
+    public class mGattUpdateReceiver : BluetoothDeviceReceiver
+    {
+        public override void OnReceive(Context context, Intent intent)
+        {
+            base.OnReceive(context, intent);
+
+            string action = intent.Action;
+
+            if (BluetoothLeService.ACTION_GATT_CONNECTED.Equals(action))
+            {
+                // mConnected = true;
+                ;
+                // updateConnectionState(R.string.connected);
+                ;
+                // invalidateOptionsMenu();
+                ;
+            }
+            else if (BluetoothLeService.ACTION_GATT_DISCONNECTED.Equals(action))
+            {
+                // mConnected = false;
+                ;
+                // updateConnectionState(R.string.disconnected);
+                ;
+                // invalidateOptionsMenu();
+                ;
+                // clearUI();
+                ;
+            }
+            else if (BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED.Equals(action))
+            {
+                // displayGattServices(mBluetoothLeService.getSupportedGattServices());
+                ;
+            }
+            else if (BluetoothLeService.ACTION_DATA_AVAILABLE.Equals(action))
+            {
+                // displayData(intent.getStringExtra(BluetoothService.EXTRA_DATA));
+                ;
+            }
         }
     }
 }
