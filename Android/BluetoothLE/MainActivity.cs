@@ -20,14 +20,21 @@ namespace BluetoothLE
         public const int REQUEST_ENABLE_BT = 1;
     }
 
+    public class Global
+    {
+        public static string DebugText = "";
+    }
+
     [Activity(Label = "Bluetooth LE Testing", MainLauncher = true, Icon = "@drawable/icon")]
     public class MainActivity : Activity
     {
         private LinearLayout layout;
-        public TextView debugText;
+        public TextView debug;
 
         private BluetoothAdapter mBluetoothAdapter;
         public static BluetoothManager mBluetoothManager;
+
+        System.Threading.Timer refresh;
 
         protected override void OnCreate(Bundle bundle)
         {
@@ -38,9 +45,13 @@ namespace BluetoothLE
             layout.SetGravity(Android.Views.GravityFlags.CenterHorizontal);
             SetContentView(layout);
 
-            debugText = new TextView(this);
-            layout.AddView(debugText);
-            debugText.Text += "Debugging...\n";
+            debug = new TextView(this);
+            layout.AddView(debug);
+            Global.DebugText += "Debugging...\n";
+
+            // Start refresh timer immediately, invoke callback every 10 ms.
+            // http://stackoverflow.com/questions/13019433/calling-method-on-every-x-minutes
+            refresh = new System.Threading.Timer(x => RefreshView(), null, 0, 10);
 
             #region Bluetooth Setup
 
@@ -55,15 +66,15 @@ namespace BluetoothLE
 
             if (mBluetoothAdapter == null || !mBluetoothAdapter.IsEnabled)
             {
-                debugText.Text += "Bluetooth is not enabled on device.\n";
-                debugText.Text += "Requesting permission to enable Bluetooth on device...\n";
+                Global.DebugText += "Bluetooth is not enabled on device.\n";
+                Global.DebugText += "Requesting permission to enable Bluetooth on device...\n";
 
                 Intent enableBtIntent = new Intent(BluetoothAdapter.ActionRequestEnable);
                 StartActivityForResult(enableBtIntent, Constants.REQUEST_ENABLE_BT);
             }
             else if (mBluetoothAdapter.IsEnabled)
             {
-                debugText.Text += "Bluetooth is enabled on device.\n";
+                Global.DebugText += "Bluetooth is enabled on device.\n";
             }
 
             #endregion
@@ -72,7 +83,7 @@ namespace BluetoothLE
 
             #region Load Paired Devices
 
-            debugText.Text += "Loading paired devices...\n";
+            Global.DebugText += "Loading paired devices...\n";
 
             ICollection<BluetoothDevice> pairedDevices = mBluetoothAdapter.BondedDevices;
 
@@ -86,12 +97,12 @@ namespace BluetoothLE
                     string deviceName = device.Name;
                     string deviceAddress = device.Address;
 
-                    debugText.Text = debugText.Text + deviceName + " (" + deviceAddress + ")\n";
+                    Global.DebugText = Global.DebugText + deviceName + " (" + deviceAddress + ")\n";
                 }
             }
             else
             {
-                debugText.Text += "No paired devices were found.\n";
+                Global.DebugText += "No paired devices were found.\n";
             }
 
             #endregion
@@ -102,7 +113,6 @@ namespace BluetoothLE
             // Bluetooth Discovery implementation.
 
             BluetoothDeviceReceiver mReceiver = new BluetoothDeviceReceiver();
-            mReceiver.debugText = debugText;
             mReceiver.mBluetoothAdapter = mBluetoothAdapter;
 
             IntentFilter filter_ActionFound = new IntentFilter(BluetoothDevice.ActionFound);
@@ -114,22 +124,28 @@ namespace BluetoothLE
             RegisterReceiver(mReceiver, filter_ActionDiscoveryFinished);
 
             // Start searching for devices.
-            debugText.Text += "Searching for discoverable devices...\n";
+            Global.DebugText += "Searching for discoverable devices...\n";
             mBluetoothAdapter.StartDiscovery();
 
             #endregion
+        }
+
+        private void RefreshView()
+        {
+            // Refresh Debug Text.
+            this.RunOnUiThread((() => debug.Text = Global.DebugText));
         }
     }
 
     public class BluetoothDeviceReceiver : BroadcastReceiver
     {
-        public TextView debugText { get; set; }
         public BluetoothAdapter mBluetoothAdapter { get; set; }
+        public BluetoothGatt mBluetoothGatt;
 
         private string btAddress = "CC:78:AB:83:3C:06";
         private bool found = false;
 
-        private GattCallback mGattCallback;
+        private GattCallback mGattCallback = new GattCallback();
 
         public override void OnReceive(Context context, Intent intent)
         {
@@ -147,28 +163,28 @@ namespace BluetoothLE
                 {
                     found = true;
 
-                    debugText.Text += "Device was found.\n";
-                    debugText.Text = debugText.Text + deviceName + " (" + deviceAddress + ")\n";
-                    
-                    debugText.Text += "Cancelling discovery...\n";
+                    Global.DebugText += "Device was found.\n";
+                    Global.DebugText = Global.DebugText + deviceName + " (" + deviceAddress + ")\n";
+
+                    Global.DebugText += "Cancelling discovery...\n";
                     mBluetoothAdapter.CancelDiscovery();
 
-                    mGattCallback = new GattCallback();
+                    mBluetoothGatt = device.ConnectGatt(context, false, mGattCallback);
                 }
             }
 
             if (action == BluetoothAdapter.ActionDiscoveryStarted)
             {
-                debugText.Text += "Discovery started...\n";
+                Global.DebugText += "Discovery started...\n";
             }
 
             if (action == BluetoothAdapter.ActionDiscoveryFinished)
             {
-                debugText.Text += "Discovery finished.\n";
+                Global.DebugText += "Discovery finished.\n";
 
                 if (!found)
                 {
-                    debugText.Text += "Device was not found.\n";
+                    Global.DebugText += "Device was not found.\n";
                 }
             }
         }
@@ -230,8 +246,18 @@ namespace BluetoothLE
                 mConnectionState = BluetoothLeService.STATE_CONNECTED;
                 broadcastUpdate(intentAction);
                 // Connected to GATT server.
+                Global.DebugText += "Connected to GATT server.\n";
                 // Attempting to start service discovery...
-                mBluetoothGatt.DiscoverServices();
+                Global.DebugText += "Attempting to start servce discovery...\n";
+
+                try
+                {
+                    mBluetoothGatt.DiscoverServices();
+                }
+                catch
+                {
+                    Global.DebugText += "Remote service discovery could not be started.\n";
+                }
                 
             }
             else if (newState == ProfileState.Disconnected)
@@ -239,6 +265,7 @@ namespace BluetoothLE
                 intentAction = BluetoothLeService.ACTION_GATT_DISCONNECTED;
                 mConnectionState = BluetoothLeService.STATE_CONNECTED;
                 // Disconnected from GATT server.
+                Global.DebugText += "Disconnected from GATT server.\n";
                 broadcastUpdate(intentAction);
             }
         }
