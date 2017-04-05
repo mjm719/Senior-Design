@@ -1,7 +1,9 @@
-﻿using Android.App;
+﻿using Android;
+using Android.App;
 using Android.Bluetooth;
 using Android.Bluetooth.LE;
 using Android.Content;
+using Android.Content.PM;
 using Android.OS;
 using Android.Views;
 using Android.Widget;
@@ -11,6 +13,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Threading.Tasks;
 using System.Timers;
 
 namespace BluetoothLE
@@ -36,7 +39,7 @@ namespace BluetoothLE
 
         System.Threading.Timer refresh;
 
-        protected override void OnCreate(Bundle bundle)
+        protected override async void OnCreate(Bundle bundle)
         {
             base.OnCreate(bundle);
 
@@ -58,6 +61,13 @@ namespace BluetoothLE
             // Initializes Bluetooth adapter.
             mBluetoothManager = (BluetoothManager) GetSystemService(Context.BluetoothService);
             mBluetoothAdapter = mBluetoothManager.Adapter;
+
+            #region Permissions
+
+            // Request permissions, if not previously granted.
+            await TryGetLocationAsync();
+
+            #endregion
 
             #region BLE Setup
 
@@ -128,6 +138,47 @@ namespace BluetoothLE
             mBluetoothAdapter.StartDiscovery();
 
             #endregion
+        }
+
+        async Task TryGetLocationAsync()
+        {
+            int Sdk = (int)Build.VERSION.SdkInt;
+
+            if (Sdk < 23)
+            {
+                Global.DebugText += "Sdk must be at least 23.\n";
+                return;
+            }
+            else
+            {
+                Global.DebugText += "Obtaining permissions...\n";
+            }
+
+            await GetLocationPermissionAsnyc();
+        }
+
+        readonly string[] PermissionsLocation =
+        {
+            Manifest.Permission.AccessCoarseLocation,
+            Manifest.Permission.AccessFineLocation
+        };
+
+        const int RequestLocationId = 0;
+
+        async Task GetLocationPermissionAsnyc()
+        {
+            const string permission = Manifest.Permission.AccessFineLocation;
+
+            if (CheckSelfPermission(permission) == (int)Permission.Granted)
+            {
+                Global.DebugText += "All permissions have been previously granted.\n";
+                return;
+            }
+
+            Global.DebugText += "Requesting permissions...\n";
+            RequestPermissions(PermissionsLocation, RequestLocationId);
+
+            await GetLocationPermissionAsnyc();
         }
 
         private void RefreshView()
