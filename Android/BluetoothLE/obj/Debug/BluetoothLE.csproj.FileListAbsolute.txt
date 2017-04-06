@@ -40,7 +40,6 @@ C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Bluet
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\bin\Debug\BluetoothLE.pdb
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\bin\Debug\BluetoothLE.BluetoothLE.apk
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\bin\Debug\BluetoothLE.BluetoothLE-Signed.apk
-C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\obj\Debug\BluetoothLE.csprojResolveAssemblyReference.cache
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\obj\Debug\BluetoothLE.dll
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\obj\Debug\BluetoothLE.pdb
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\obj\Debug\android\bin\BluetoothLE.BluetoothLE.apk
@@ -73,5 +72,6 @@ C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Bluet
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\obj\Debug\android\assets\System.ServiceModel.Internals.dll.mdb
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\obj\Debug\android\assets\System.Xml.dll.mdb
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\obj\Debug\android\assets\System.Xml.Linq.dll.mdb
+C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\obj\Debug\BluetoothLE.csprojResolveAssemblyReference.cache
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\obj\Debug\BluetoothLE.dll.mdb
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\BluetoothLE\bin\Debug\BluetoothLE.dll.mdb

@@ -15,6 +15,7 @@ using System.IO;
 using System.Reflection;
 using System.Threading.Tasks;
 using System.Timers;
+using Android.Runtime;
 
 namespace BluetoothLE
 {
@@ -253,7 +254,7 @@ namespace BluetoothLE
 
         private void Write(object sender, EventArgs e)
         {
-            string output = "Testing...";
+            Int32 output = 0x4B435546;
 
             bool success = false;
 
@@ -343,7 +344,7 @@ namespace BluetoothLE
             }
         }
 
-        public bool Write(string output)
+        public bool Write(Int32 output)
         {
             // Returns true if Write operation is successful; returns false otherwise.
 
@@ -402,8 +403,12 @@ namespace BluetoothLE
 
         public int mConnectionState = BluetoothLeService.STATE_DISCONNECTED;
 
+        public GattUpdateReceiver mGattUpdateReveiver = new GattUpdateReceiver();
+
         public DeviceControlActivity mDeviceControlActivity = new DeviceControlActivity();
         public BluetoothGattCharacteristic mGattCharacteristic;
+
+        public string data;
 
         public override void OnConnectionStateChange(BluetoothGatt gatt, GattStatus status, ProfileState newState)
         {
@@ -471,6 +476,16 @@ namespace BluetoothLE
             }
         }
 
+        public override void OnCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, [GeneratedEnum] GattStatus status)
+        {
+            base.OnCharacteristicWrite(gatt, characteristic, status);
+
+            if (status == GattStatus.Success)
+            {
+                BroadcastUpdate(BluetoothLeService.ACTION_DATA_AVAILABLE, characteristic);
+            }
+        }
+
         private void BroadcastUpdate(string action)
         {
             Intent intent = new Intent(action);
@@ -484,7 +499,7 @@ namespace BluetoothLE
             Intent intent = new Intent(action);
 
             // Special handling goes here.
-            ;
+            data = characteristic.GetStringValue(0);
 
             // Send broadcast.
             ;
@@ -509,9 +524,8 @@ namespace BluetoothLE
             {
                 Global.DebugText += "Read operation successful.\n";
 
-                // Implement Read operation here.
-
-                input = "Not null!";
+                // Return the data received from callback.
+                input = this.data;
             }
             else
             {
@@ -521,7 +535,7 @@ namespace BluetoothLE
             return input;
         }
 
-        public bool Write(string output)
+        public bool Write(Int32 output)
         {
             // Returns true if Write operation is successful; returns false otherwise.
 
@@ -534,28 +548,29 @@ namespace BluetoothLE
 
             mGattCharacteristic = mDeviceControlActivity.mGattCharacteristics[5][0];
 
+            mGattCharacteristic.SetValue(output, GattFormat.Uint32, 0);
+
+            BluetoothGattDescriptor mDescriptor = mGattCharacteristic.GetDescriptor(UUID.FromString("f0001131-0451-4000-b000-000000000000"));
+
             if (mBluetoothGatt.WriteCharacteristic(mGattCharacteristic))
             {
                 Global.DebugText += "Write operation successful.\n";
-
-                // Implement Write operation here.
 
                 return true;
             }
             else
             {
                 Global.DebugText += "Write operation failed.\n";
+
                 return false;
             }
         }
     }
 
-    public class mGattUpdateReceiver : BluetoothDeviceReceiver
+    public class GattUpdateReceiver : BroadcastReceiver
     {
         public override void OnReceive(Context context, Intent intent)
         {
-            base.OnReceive(context, intent);
-
             string action = intent.Action;
 
             if (BluetoothLeService.ACTION_GATT_CONNECTED.Equals(action))
@@ -585,7 +600,8 @@ namespace BluetoothLE
             }
             else if (BluetoothLeService.ACTION_DATA_AVAILABLE.Equals(action))
             {
-                // displayData(intent.getStringExtra(BluetoothService.EXTRA_DATA));
+                string data = intent.GetStringExtra(BluetoothLeService.EXTRA_DATA);
+
                 ;
             }
         }
