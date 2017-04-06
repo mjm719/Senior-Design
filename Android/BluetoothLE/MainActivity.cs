@@ -31,6 +31,42 @@ namespace BluetoothLE
         public static string DebugText = "";
     }
 
+    public class SampleGattAttributes
+    {
+        public static string CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb";
+
+        private static Dictionary<string, string> Attributes = new Dictionary<string, string>()
+        {
+			// Sample Services.
+            {   "0000180a-0000-1000-8000-00805f9b34fb", "Device Information Service"    },
+            {   "f0001110-0451-4000-b000-000000000000", "LED Service"                   },
+            {   "f0001111-0451-4000-b000-000000000000", "LED0 State"                    },
+            {   "f0001112-0451-4000-b000-000000000000", "LED1 State"                    },
+            {   "f0001120-0451-4000-b000-000000000000", "Button Service"                },
+            {   "f0001121-0451-4000-b000-000000000000", "Button0 State"                 },
+            {   "f0001122-0451-4000-b000-000000000000", "Button1 State"                 },
+            {   "f0001130-0451-4000-b000-000000000000", "Data Service"                  },
+            {   "f0001131-0451-4000-b000-000000000000", "String char"                   },
+            {   "f0001132-0451-4000-b000-000000000000", "Stream char"                   },
+
+			// Sample Characteristics.
+            {   "00002a29-0000-1000-8000-00805f9b34fb", "Manufacturer Name String"      },
+        };
+
+        public static string Lookup(string key, string defaultName)
+        {
+            string name = defaultName;
+
+            try
+            {
+                name = Attributes[key];
+            }
+            catch { }
+
+            return name;
+        }
+    }
+
     [Activity(Label = "Bluetooth LE Testing", MainLauncher = true, Icon = "@drawable/icon")]
     public class MainActivity : Activity
     {
@@ -52,7 +88,6 @@ namespace BluetoothLE
             SetContentView(layout);
 
             debug = new TextView(this);
-            debug.TextSize = 8;
             layout.AddView(debug);
             Global.DebugText += "Debugging...\n";
 
@@ -140,6 +175,36 @@ namespace BluetoothLE
             // Start searching for devices.
             Global.DebugText += "Searching for discoverable devices...\n";
             mBluetoothAdapter.StartDiscovery();
+
+            #endregion
+
+            // Wait for preceding operations to finish.
+            Thread.Sleep(10000);
+
+            #region Example Read/Write Operation
+
+            #region Example Read Operation
+
+            // Returns input if Read operation is successful; returns null otherwise.
+
+            string input = mReceiver.Read();
+
+            Global.DebugText = Global.DebugText + "Read: " + input + "\n";
+
+            #endregion
+
+            Thread.Sleep(2000);
+
+            #region Example Write Operation
+
+            // Returns true if Write operation is successful; returns false otherwise.
+
+            string output = "Testing...";
+            bool success = mReceiver.Write(output);
+
+            Global.DebugText = Global.DebugText + "Write: " + success.ToString() + "\n";
+
+            #endregion
 
             #endregion
         }
@@ -247,6 +312,18 @@ namespace BluetoothLE
                 }
             }
         }
+
+        public string Read()
+        {
+            // Returns input if Read operation is successful; returns null otherwise.
+            return mGattCallback.Read();
+        }
+
+        public bool Write(string output)
+        {
+            // Returns true if Write operation is successful; returns false otherwise.
+            return mGattCallback.Write(output);
+        }
     }
 
     public class BluetoothLeService : Service
@@ -294,6 +371,7 @@ namespace BluetoothLE
         public int mConnectionState = BluetoothLeService.STATE_DISCONNECTED;
 
         public DeviceControlActivity mDeviceControlActivity = new DeviceControlActivity();
+        public BluetoothGattCharacteristic mGattCharacteristic;
 
         public override void OnConnectionStateChange(BluetoothGatt gatt, GattStatus status, ProfileState newState)
         {
@@ -305,10 +383,9 @@ namespace BluetoothLE
             {
                 intentAction = BluetoothLeService.ACTION_GATT_CONNECTED;
                 mConnectionState = BluetoothLeService.STATE_CONNECTED;
-                broadcastUpdate(intentAction);
-                // Connected to GATT server.
+                BroadcastUpdate(intentAction);
+
                 Global.DebugText += "Connected to GATT server.\n";
-                // Attempting to start service discovery...
                 Global.DebugText += "Attempting to start servce discovery...\n";
 
                 try
@@ -326,7 +403,7 @@ namespace BluetoothLE
                 mConnectionState = BluetoothLeService.STATE_CONNECTED;
                 // Disconnected from GATT server.
                 Global.DebugText += "Disconnected from GATT server.\n";
-                broadcastUpdate(intentAction);
+                BroadcastUpdate(intentAction);
             }
         }
 
@@ -338,35 +415,14 @@ namespace BluetoothLE
             if (status == GattStatus.Success)
             {
                 Global.DebugText += "Service discovery successful.\n";
-                broadcastUpdate(BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED);
-
-                #region IN DEVELOPMENT
-
-                mDeviceControlActivity.DisplayGattServices(gatt.Services);
-
-                BluetoothGattCharacteristic characteristic = mDeviceControlActivity.mGattCharacteristics[5][0];
-
-                //bool read = mBluetoothGatt.ReadCharacteristic(characteristic);
-                bool write = mBluetoothGatt.WriteCharacteristic(characteristic);
-
-                //mBluetoothGatt.SetCharacteristicNotification(characteristic, true);
-
-                //BluetoothGattDescriptor descriptor = characteristic.GetDescriptor(UUID.FromString(SampleGattAttributes.CLIENT_CHARACTERISTIC_CONFIG));
-                //byte[] notificationValue = new byte[32];
-                //BluetoothGattDescriptor.EnableIndicationValue.CopyTo(notificationValue, 0);
-                //descriptor.SetValue(notificationValue);
-                //mBluetoothGatt.WriteDescriptor(descriptor);
-
-                Thread.Sleep(1000);
-
-                ;
+                BroadcastUpdate(BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED);
                 
-                #endregion
+                Global.DebugText += "Gathering available Gatt services...\n";
+                mDeviceControlActivity.DisplayGattServices(gatt.Services);
             }
             else
             {
-                Global.DebugText += "Service discovery was not successful.\n";
-                // onServicesDiscovered received.
+                Global.DebugText += "Service discovery failed.\n";
             }
         }
 
@@ -377,11 +433,11 @@ namespace BluetoothLE
 
             if (status == GattStatus.Success)
             {
-                broadcastUpdate(BluetoothLeService.ACTION_DATA_AVAILABLE, characteristic);
+                BroadcastUpdate(BluetoothLeService.ACTION_DATA_AVAILABLE, characteristic);
             }
         }
 
-        private void broadcastUpdate(string action)
+        private void BroadcastUpdate(string action)
         {
             Intent intent = new Intent(action);
 
@@ -389,7 +445,7 @@ namespace BluetoothLE
             ;
         }
 
-        private void broadcastUpdate(string action, BluetoothGattCharacteristic characteristic)
+        private void BroadcastUpdate(string action, BluetoothGattCharacteristic characteristic)
         {
             Intent intent = new Intent(action);
 
@@ -398,6 +454,46 @@ namespace BluetoothLE
 
             // Send broadcast.
             ;
+        }
+
+        public string Read()
+        {
+            // Returns input if Read operation is successful; returns null otherwise.
+
+            string input = null;
+
+            mGattCharacteristic = mDeviceControlActivity.mGattCharacteristics[5][0];
+
+            if (mBluetoothGatt.ReadCharacteristic(mGattCharacteristic))
+            {
+                Global.DebugText += "Read operation successful.\n";
+
+                input = "Not null!";
+            }
+            else
+            {
+                Global.DebugText += "Read operation failed.\n";
+            }
+
+            return input;
+        }
+
+        public bool Write(string output)
+        {
+            // Returns true if Write operation is successful; returns false otherwise.
+
+            mGattCharacteristic = mDeviceControlActivity.mGattCharacteristics[5][0];
+
+            if (mBluetoothGatt.WriteCharacteristic(mGattCharacteristic))
+            {
+                Global.DebugText += "Write operation successful.\n";
+                return true;
+            }
+            else
+            {
+                Global.DebugText += "WRite operation failed.\n";
+                return false;
+            }
         }
     }
 
@@ -439,45 +535,6 @@ namespace BluetoothLE
                 // displayData(intent.getStringExtra(BluetoothService.EXTRA_DATA));
                 ;
             }
-        }
-    }
-
-    public class SampleGattAttributes
-    {
-        public static string CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb";
-
-        private static Dictionary<string, string> Attributes = new Dictionary<string, string>()
-        {
-			// Sample Services.
-            {   "0000180a-0000-1000-8000-00805f9b34fb", "Device Information Service"    },
-            {   "f0001110-0451-4000-b000-000000000000", "LED Service"                   },
-            {   "f0001111-0451-4000-b000-000000000000", "LED0 State"                    },
-            {   "f0001112-0451-4000-b000-000000000000", "LED1 State"                    },
-            {   "f0001120-0451-4000-b000-000000000000", "Button Service"                },
-            {   "f0001121-0451-4000-b000-000000000000", "Button0 State"                 },
-            {   "f0001122-0451-4000-b000-000000000000", "Button1 State"                 },
-            {   "f0001130-0451-4000-b000-000000000000", "Data Service"                  },
-            {   "f0001131-0451-4000-b000-000000000000", "String char"                   },
-            {   "f0001132-0451-4000-b000-000000000000", "Stream char"                   },
-
-			// Sample Characteristics.
-            {   "00002a29-0000-1000-8000-00805f9b34fb", "Manufacturer Name String"      },
-        };
-
-        public static string Lookup(string key, string defaultName)
-        {
-            string name = defaultName;
-
-            try
-            {
-                name = Attributes[key];
-            }
-            catch { }
-
-            Thread.Sleep(100);
-            Global.DebugText = Global.DebugText + key + " (" + name + ")\n";
-
-            return name;
         }
     }
 
