@@ -21,6 +21,9 @@ namespace BluetoothLE
     public static class Constants
     {
         public const int REQUEST_ENABLE_BT = 1;
+
+        public const string LIST_NAME = "NAME";
+        public const string LIST_UUID = "UUID";
     }
 
     public class Global
@@ -49,6 +52,7 @@ namespace BluetoothLE
             SetContentView(layout);
 
             debug = new TextView(this);
+            debug.TextSize = 8;
             layout.AddView(debug);
             Global.DebugText += "Debugging...\n";
 
@@ -221,6 +225,10 @@ namespace BluetoothLE
                     mBluetoothAdapter.CancelDiscovery();
 
                     mBluetoothGatt = device.ConnectGatt(context, false, mGattCallback);
+
+                    mGattCallback.mBluetoothAdapter = mBluetoothAdapter;
+                    mGattCallback.mBluetoothDeviceAddress = deviceAddress;
+                    mGattCallback.mBluetoothGatt = mBluetoothGatt;
                 }
             }
 
@@ -285,6 +293,8 @@ namespace BluetoothLE
 
         public int mConnectionState = BluetoothLeService.STATE_DISCONNECTED;
 
+        public DeviceControlActivity mDeviceControlActivity = new DeviceControlActivity();
+
         public override void OnConnectionStateChange(BluetoothGatt gatt, GattStatus status, ProfileState newState)
         {
             base.OnConnectionStateChange(gatt, status, newState);
@@ -309,7 +319,6 @@ namespace BluetoothLE
                 {
                     Global.DebugText += "Remote service discovery could not be started.\n";
                 }
-                
             }
             else if (newState == ProfileState.Disconnected)
             {
@@ -328,10 +337,35 @@ namespace BluetoothLE
 
             if (status == GattStatus.Success)
             {
+                Global.DebugText += "Service discovery successful.\n";
                 broadcastUpdate(BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED);
+
+                #region IN DEVELOPMENT
+
+                mDeviceControlActivity.DisplayGattServices(gatt.Services);
+
+                BluetoothGattCharacteristic characteristic = mDeviceControlActivity.mGattCharacteristics[5][0];
+
+                //bool read = mBluetoothGatt.ReadCharacteristic(characteristic);
+                bool write = mBluetoothGatt.WriteCharacteristic(characteristic);
+
+                //mBluetoothGatt.SetCharacteristicNotification(characteristic, true);
+
+                //BluetoothGattDescriptor descriptor = characteristic.GetDescriptor(UUID.FromString(SampleGattAttributes.CLIENT_CHARACTERISTIC_CONFIG));
+                //byte[] notificationValue = new byte[32];
+                //BluetoothGattDescriptor.EnableIndicationValue.CopyTo(notificationValue, 0);
+                //descriptor.SetValue(notificationValue);
+                //mBluetoothGatt.WriteDescriptor(descriptor);
+
+                Thread.Sleep(1000);
+
+                ;
+                
+                #endregion
             }
             else
             {
+                Global.DebugText += "Service discovery was not successful.\n";
                 // onServicesDiscovered received.
             }
         }
@@ -404,6 +438,102 @@ namespace BluetoothLE
             {
                 // displayData(intent.getStringExtra(BluetoothService.EXTRA_DATA));
                 ;
+            }
+        }
+    }
+
+    public class SampleGattAttributes
+    {
+        public static string CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb";
+
+        private static Dictionary<string, string> Attributes = new Dictionary<string, string>()
+        {
+			// Sample Services.
+            {   "0000180a-0000-1000-8000-00805f9b34fb", "Device Information Service"    },
+            {   "f0001110-0451-4000-b000-000000000000", "LED Service"                   },
+            {   "f0001111-0451-4000-b000-000000000000", "LED0 State"                    },
+            {   "f0001112-0451-4000-b000-000000000000", "LED1 State"                    },
+            {   "f0001120-0451-4000-b000-000000000000", "Button Service"                },
+            {   "f0001121-0451-4000-b000-000000000000", "Button0 State"                 },
+            {   "f0001122-0451-4000-b000-000000000000", "Button1 State"                 },
+            {   "f0001130-0451-4000-b000-000000000000", "Data Service"                  },
+            {   "f0001131-0451-4000-b000-000000000000", "String char"                   },
+            {   "f0001132-0451-4000-b000-000000000000", "Stream char"                   },
+
+			// Sample Characteristics.
+            {   "00002a29-0000-1000-8000-00805f9b34fb", "Manufacturer Name String"      },
+        };
+
+        public static string Lookup(string key, string defaultName)
+        {
+            string name = defaultName;
+
+            try
+            {
+                name = Attributes[key];
+            }
+            catch { }
+
+            Thread.Sleep(100);
+            Global.DebugText = Global.DebugText + key + " (" + name + ")\n";
+
+            return name;
+        }
+    }
+
+    public class DeviceControlActivity : Activity
+    {
+        public List<IList<BluetoothGattCharacteristic>> mGattCharacteristics;
+
+        public void DisplayGattServices(IList<BluetoothGattService> gattServices)
+        {
+            if (gattServices == null)
+            {
+                return;
+            }
+
+            string uuid = null;
+            IList<HashMap> gattServiceData = new List<HashMap>();
+            IList<IList<HashMap>> gattCharacteristicData = new List<IList<HashMap>>();
+            mGattCharacteristics = new List<IList<BluetoothGattCharacteristic>>();
+
+            // Loops through available GATT Services.
+            foreach (BluetoothGattService gattService in gattServices)
+            {
+                HashMap currentServiceData = new HashMap();
+
+                string unknownServiceString = "Unknown Service";
+
+                uuid = gattService.Uuid.ToString();
+
+                currentServiceData.Put(Constants.LIST_NAME, SampleGattAttributes.Lookup(uuid, unknownServiceString));
+                currentServiceData.Put(Constants.LIST_UUID, uuid);
+
+                gattServiceData.Add(currentServiceData);
+
+                IList<HashMap> gattCharacteristicGroupData = new List<HashMap>();
+                IList<BluetoothGattCharacteristic> gattCharacteristics = gattService.Characteristics;
+                IList<BluetoothGattCharacteristic> charas = new List<BluetoothGattCharacteristic>();
+
+                // Loops through available characteristics.
+                foreach (BluetoothGattCharacteristic gattCharacteristic in gattCharacteristics)
+                {
+                    charas.Add(gattCharacteristic);
+
+                    HashMap currentCharaData = new HashMap();
+
+                    string unknownCharaString = "Unknown Characteristic";
+
+                    uuid = gattCharacteristic.Uuid.ToString();
+                    
+                    currentCharaData.Put(Constants.LIST_NAME, SampleGattAttributes.Lookup(uuid, unknownCharaString));
+                    currentCharaData.Put(Constants.LIST_UUID, uuid);
+
+                    gattCharacteristicGroupData.Add(currentCharaData);
+                }
+
+                mGattCharacteristics.Add(charas);
+                gattCharacteristicData.Add(gattCharacteristicGroupData);
             }
         }
     }
