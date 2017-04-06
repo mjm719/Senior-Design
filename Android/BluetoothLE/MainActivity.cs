@@ -70,11 +70,14 @@ namespace BluetoothLE
     [Activity(Label = "Bluetooth LE Testing", MainLauncher = true, Icon = "@drawable/icon")]
     public class MainActivity : Activity
     {
-        private LinearLayout layout;
+        public LinearLayout layout;
+        public Button readButton;
+        public Button writeButton;
         public TextView debug;
 
-        private BluetoothAdapter mBluetoothAdapter;
+        public BluetoothAdapter mBluetoothAdapter;
         public static BluetoothManager mBluetoothManager;
+        public BluetoothDeviceReceiver mReceiver;
 
         System.Threading.Timer refresh;
 
@@ -86,6 +89,16 @@ namespace BluetoothLE
             layout.Orientation = Orientation.Vertical;
             layout.SetGravity(Android.Views.GravityFlags.CenterHorizontal);
             SetContentView(layout);
+
+            readButton = new Button(this);
+            layout.AddView(readButton);
+            readButton.Text = "Read";
+            readButton.Click += Read;
+
+            writeButton = new Button(this);
+            layout.AddView(writeButton);
+            writeButton.Text = "Write";
+            writeButton.Click += Write;
 
             debug = new TextView(this);
             layout.AddView(debug);
@@ -161,7 +174,7 @@ namespace BluetoothLE
             // BLE Discovery method has various missing classes/functions, so use the regular
             // Bluetooth Discovery implementation.
 
-            BluetoothDeviceReceiver mReceiver = new BluetoothDeviceReceiver();
+            mReceiver = new BluetoothDeviceReceiver();
             mReceiver.mBluetoothAdapter = mBluetoothAdapter;
 
             IntentFilter filter_ActionFound = new IntentFilter(BluetoothDevice.ActionFound);
@@ -175,36 +188,6 @@ namespace BluetoothLE
             // Start searching for devices.
             Global.DebugText += "Searching for discoverable devices...\n";
             mBluetoothAdapter.StartDiscovery();
-
-            #endregion
-
-            // Wait for preceding operations to finish.
-            Thread.Sleep(10000);
-
-            #region Example Read/Write Operation
-
-            #region Example Read Operation
-
-            // Returns input if Read operation is successful; returns null otherwise.
-
-            string input = mReceiver.Read();
-
-            Global.DebugText = Global.DebugText + "Read: " + input + "\n";
-
-            #endregion
-
-            Thread.Sleep(2000);
-
-            #region Example Write Operation
-
-            // Returns true if Write operation is successful; returns false otherwise.
-
-            string output = "Testing...";
-            bool success = mReceiver.Write(output);
-
-            Global.DebugText = Global.DebugText + "Write: " + success.ToString() + "\n";
-
-            #endregion
 
             #endregion
         }
@@ -248,6 +231,39 @@ namespace BluetoothLE
             RequestPermissions(PermissionsLocation, RequestLocationId);
 
             await GetLocationPermissionAsnyc();
+        }
+
+        private void Read(object sender, EventArgs e)
+        {
+            string input = null;
+
+            try
+            {
+                input = mReceiver.Read();
+            }
+            catch { };
+
+            if (input == null)
+            {
+                input = "null";
+            }
+
+            Global.DebugText = Global.DebugText + "Read: " + input + "\n";
+        }
+
+        private void Write(object sender, EventArgs e)
+        {
+            string output = "Testing...";
+
+            bool success = false;
+
+            try
+            {
+                success = mReceiver.Write(output);
+            }
+            catch { };
+
+            Global.DebugText = Global.DebugText + "Write: " + success.ToString() + "\n";
         }
 
         private void RefreshView()
@@ -316,13 +332,29 @@ namespace BluetoothLE
         public string Read()
         {
             // Returns input if Read operation is successful; returns null otherwise.
-            return mGattCallback.Read();
+
+            try
+            {
+                return mGattCallback.Read();
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         public bool Write(string output)
         {
             // Returns true if Write operation is successful; returns false otherwise.
-            return mGattCallback.Write(output);
+
+            try
+            {
+                return mGattCallback.Write(output);
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 
@@ -419,6 +451,8 @@ namespace BluetoothLE
                 
                 Global.DebugText += "Gathering available Gatt services...\n";
                 mDeviceControlActivity.DisplayGattServices(gatt.Services);
+
+                Global.DebugText += "Read/Write commands may now be issued.\n";
             }
             else
             {
@@ -462,11 +496,20 @@ namespace BluetoothLE
 
             string input = null;
 
+            // Check if mDeviceControlActivity has been instantiated.
+            if (mDeviceControlActivity == null)
+            {
+                Global.DebugText += "mDeviceControlActivity has not been instatiated yet!\n";
+                return input;
+            }
+
             mGattCharacteristic = mDeviceControlActivity.mGattCharacteristics[5][0];
 
             if (mBluetoothGatt.ReadCharacteristic(mGattCharacteristic))
             {
                 Global.DebugText += "Read operation successful.\n";
+
+                // Implement Read operation here.
 
                 input = "Not null!";
             }
@@ -482,16 +525,26 @@ namespace BluetoothLE
         {
             // Returns true if Write operation is successful; returns false otherwise.
 
+            // Check if mDeviceControlActivity has been instantiated.
+            if (mDeviceControlActivity == null)
+            {
+                Global.DebugText += "mDeviceControlActivity has not been instatiated yet!\n";
+                return false;
+            }
+
             mGattCharacteristic = mDeviceControlActivity.mGattCharacteristics[5][0];
 
             if (mBluetoothGatt.WriteCharacteristic(mGattCharacteristic))
             {
                 Global.DebugText += "Write operation successful.\n";
+
+                // Implement Write operation here.
+
                 return true;
             }
             else
             {
-                Global.DebugText += "WRite operation failed.\n";
+                Global.DebugText += "Write operation failed.\n";
                 return false;
             }
         }
