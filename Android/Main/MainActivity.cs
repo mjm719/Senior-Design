@@ -1,32 +1,99 @@
-﻿using Android.App;
-using Android.Widget;
-using Android.OS;
+﻿using Android;
+using Android.App;
 using Android.Bluetooth;
-
-using System.Threading;
+using Android.Bluetooth.LE;
+using Android.Content;
+using Android.Content.PM;
+using Android.OS;
+using Android.Views;
+using Android.Widget;
+using Java.Lang;
+using Java.Util;
+using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
 using System.Resources;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Timers;
+using Android.Runtime;
 
 namespace Main
 {
+    public static class Constants
+    {
+        public static int MINPRESSURE = 15;
+        public static int MAXPRESSURE = 70;
+        public static int MAXPRESETS = 5;
+
+        public const int REQUEST_ENABLE_BT = 1;
+
+        public const string LIST_NAME = "NAME";
+        public const string LIST_UUID = "UUID";
+    }
+
+    public static class Global
+    {
+        public static int currentPressure;
+        public static int targetPressure;
+
+        public static bool forceIdle;
+
+        public static bool pressureFault;
+        public static int status;
+        public static bool batteryShutdown;
+
+        public static LinearLayout layout;
+        public static List<LinearLayout> Presets;
+        public static List<Button> ActivateButtons;
+        public static List<ImageButton> EditButtons;
+        public static List<ImageButton> DeleteButtons;
+        public static List<int> PresetVals;
+    }
+
+    public class SampleGattAttributes
+    {
+        public static string CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb";
+
+        private static Dictionary<string, string> Attributes = new Dictionary<string, string>()
+        {
+			// Sample Services.
+            {   "0000180a-0000-1000-8000-00805f9b34fb", "Device Information Service"    },
+            {   "f0001110-0451-4000-b000-000000000000", "LED Service"                   },
+            {   "f0001111-0451-4000-b000-000000000000", "LED0 State"                    },
+            {   "f0001112-0451-4000-b000-000000000000", "LED1 State"                    },
+            {   "f0001120-0451-4000-b000-000000000000", "Button Service"                },
+            {   "f0001121-0451-4000-b000-000000000000", "Button0 State"                 },
+            {   "f0001122-0451-4000-b000-000000000000", "Button1 State"                 },
+            {   "f0001130-0451-4000-b000-000000000000", "Data Service"                  },
+            {   "f0001131-0451-4000-b000-000000000000", "String char"                   },
+            {   "f0001132-0451-4000-b000-000000000000", "Stream char"                   },
+
+			// Sample Characteristics.
+            {   "00002a29-0000-1000-8000-00805f9b34fb", "Manufacturer Name String"      },
+        };
+
+        public static string Lookup(string key, string defaultName)
+        {
+            string name = defaultName;
+
+            try
+            {
+                name = Attributes[key];
+            }
+            catch { }
+
+            return name;
+        }
+    }
+
     [Activity(Label = "BPR", MainLauncher = true, Icon = "@drawable/icon")]
     public class MainActivity : Activity
     {
         static float widthInDp;
         static float heightInDp;
 
-        static int MINPRESSURE = 15;
-        static int MAXPRESSURE = 70;
-        static int MAXPRESETS = 5;
-        public int currentPressure;
-        public int targetPressure;
-
-        LinearLayout layout;
-        List<LinearLayout> Presets;
-        List<Button> ActivateButtons;
-        List<ImageButton> EditButtons;
-        List<ImageButton> DeleteButtons;
-        List<int> PresetVals;
         public int PresetsCount = 0;
         public int CurrentIndex;
         public string CurrentName;
@@ -52,8 +119,17 @@ namespace Main
         SeekBar seekBar;
         Button setButton;
 
-        Timer refresh;
-        Timer update;
+        public LinearLayout layout;
+        public Button readButton;
+        public Button writeButton;
+        public TextView debug;
+
+        public BluetoothAdapter mBluetoothAdapter;
+        public static BluetoothManager mBluetoothManager;
+        public BluetoothDeviceReceiver mReceiver;
+
+        System.Threading.Timer refresh;
+        System.Threading.Timer update;
 
         protected override void OnCreate(Bundle bundle)
         {
@@ -64,52 +140,113 @@ namespace Main
 
             #region Bluetooth
 
-            /*
-            BluetoothAdapter adapter = BluetoothAdapter.DefaultAdapter;
-            if (adapter == null)
-                throw new System.ArgumentException("No Bluetooth adapter found.");
-            if (!adapter.IsEnabled)
-                throw new System.ArgumentException("Bluetooth adapter is not enabled.");
-            BluetoothDevice device = (from bd in adapter.BondedDevices
-                                      where bd.Name == "NameOfTheDevice"
-                                      select bd).FirstOrDefault();
-            if (device == null)
-                throw new System.ArgumentException("Named device not found.");
-            BluetoothSocket _socket = device.CreateRfcommSocketToServiceRecord(UUID.FromString("00001101-0000-1000-8000-00805f9b34fb"));
-            await _socket.ConnectAsync();
-            // Read data from the device
-            await _socket.InputStream.ReadAsync(buffer, 0, buffer.Length);
-            // Write data to the device
-            await _socket.OutputStream.WriteAsync(buffer, 0, buffer.Length);
-            */
+            #region Bluetooth Setup
+
+            // Initializes Bluetooth adapter.
+            mBluetoothManager = (BluetoothManager)GetSystemService(Context.BluetoothService);
+            mBluetoothAdapter = mBluetoothManager.Adapter;
+
+            #region Permissions
+
+            // Request permissions, if not previously granted.
+            TryGetLocation();
 
             #endregion
 
-            layout = new LinearLayout(this);
-            layout.Orientation = Orientation.Vertical;
-            layout.SetGravity(Android.Views.GravityFlags.CenterHorizontal);
-            SetContentView(layout);
+            #region BLE Setup
 
-            currentPressure = 50;
-            targetPressure = currentPressure;
+            // Ensures Bluetooth is available on the device and it is enabled. If not,
+            // displays a dialog requesting user permission to enable Bluetooth.
+
+            if (mBluetoothAdapter == null || !mBluetoothAdapter.IsEnabled)
+            {
+                // Bluetooth is not enabled on device.
+                // Requesting permission to enable Bluetooth on device...
+
+                Intent enableBtIntent = new Intent(BluetoothAdapter.ActionRequestEnable);
+                StartActivityForResult(enableBtIntent, Constants.REQUEST_ENABLE_BT);
+            }
+            else if (mBluetoothAdapter.IsEnabled)
+            {
+                // Bluetooth is enabled on device.
+            }
+
+            #endregion
+
+            #endregion
+
+            #region Load Paired Devices
+
+            // Loading paired devices...
+
+            ICollection<BluetoothDevice> pairedDevices = mBluetoothAdapter.BondedDevices;
+
+            if (pairedDevices.Count > 0)
+            {
+                // There are pre-existing paired devices.
+                // Get the name and address of each device.
+
+                foreach (BluetoothDevice device in pairedDevices)
+                {
+                    string deviceName = device.Name;
+                    string deviceAddress = device.Address;
+                }
+            }
+            else
+            {
+                // No paired devices were found.
+            }
+
+            #endregion
+
+            #region Find Devices
+
+            // BLE Discovery method has various missing classes/functions, so use the regular
+            // Bluetooth Discovery implementation.
+
+            mReceiver = new BluetoothDeviceReceiver();
+            mReceiver.mBluetoothAdapter = mBluetoothAdapter;
+
+            IntentFilter filter_ActionFound = new IntentFilter(BluetoothDevice.ActionFound);
+            IntentFilter filter_ActionDiscoveryStarted = new IntentFilter(BluetoothAdapter.ActionDiscoveryStarted);
+            IntentFilter filter_ActionDiscoveryFinished = new IntentFilter(BluetoothAdapter.ActionDiscoveryFinished);
+
+            RegisterReceiver(mReceiver, filter_ActionFound);
+            RegisterReceiver(mReceiver, filter_ActionDiscoveryStarted);
+            RegisterReceiver(mReceiver, filter_ActionDiscoveryFinished);
+
+            // Start searching for devices.
+            mBluetoothAdapter.StartDiscovery();
+
+            #endregion
+
+            #endregion
+
+            Global.layout = new LinearLayout(this);
+            Global.layout.Orientation = Orientation.Vertical;
+            Global.layout.SetGravity(Android.Views.GravityFlags.CenterHorizontal);
+            SetContentView(Global.layout);
+
+            Global.currentPressure = 50;
+            Global.targetPressure = Global.currentPressure;
 
             // Start refresh timer immediately, invoke callback every 10 ms.
             // http://stackoverflow.com/questions/13019433/calling-method-on-every-x-minutes
             refresh = new System.Threading.Timer(x => RefreshView(), null, 0, 10);
 
-            // Start update timer immediately, invoke callback every 200 ms.
-            update = new System.Threading.Timer(x => Update(), null, 0, 200);
+            // Start update timer immediately, invoke callback every 1 s (1000 ms).
+            update = new System.Threading.Timer(x => Update(), null, 0, 1000);
 
             #region Main Views
 
             vMargin1 = new Space(this);
-            layout.AddView(vMargin1);
+            Global.layout.AddView(vMargin1);
             vMargin1.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.025);
 
             #region Current Pressure
 
             currentPressureView = new TextView(this);
-            layout.AddView(currentPressureView);
+            Global.layout.AddView(currentPressureView);
             currentPressureView.Gravity = Android.Views.GravityFlags.Center;
             currentPressureView.Text = "Current Pressure: ???";
             currentPressureView.TextSize = (int)(Resources.DisplayMetrics.WidthPixels * 0.0175);
@@ -120,7 +257,7 @@ namespace Main
             #region Target Pressure
 
             targetPressureView = new TextView(this);
-            layout.AddView(targetPressureView);
+            Global.layout.AddView(targetPressureView);
             targetPressureView.Gravity = Android.Views.GravityFlags.Center;
             targetPressureView.Text = "Target Pressure: ???";
             targetPressureView.TextSize = (int)(Resources.DisplayMetrics.WidthPixels * 0.0175);
@@ -131,7 +268,7 @@ namespace Main
             #region Status
 
             statusView = new TextView(this);
-            layout.AddView(statusView);
+            Global.layout.AddView(statusView);
             statusView.Gravity = Android.Views.GravityFlags.Center;
             statusView.Text = "Initializing...";
             statusView.TextSize = (int)(Resources.DisplayMetrics.WidthPixels * 0.015);
@@ -140,13 +277,13 @@ namespace Main
             #endregion
 
             vMargin2 = new Space(this);
-            layout.AddView(vMargin2);
+            Global.layout.AddView(vMargin2);
             vMargin2.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.05);
 
             #region Add Button
 
             addButton = new ImageButton(this);
-            layout.AddView(addButton);
+            Global.layout.AddView(addButton);
             addButton.SetBackgroundResource(Resources.GetIdentifier("icon_add", "drawable", PackageName));
             addButton.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.05);
             addButton.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.05);
@@ -156,16 +293,16 @@ namespace Main
 
             #region Presets
 
-            Presets = new List<LinearLayout>();
-            ActivateButtons = new List<Button>();
-            EditButtons = new List<ImageButton>();
-            DeleteButtons = new List<ImageButton>();
-            PresetVals = new List<int>();
+            Global.Presets = new List<LinearLayout>();
+            Global.ActivateButtons = new List<Button>();
+            Global.EditButtons = new List<ImageButton>();
+            Global.DeleteButtons = new List<ImageButton>();
+            Global.PresetVals = new List<int>();
 
             // Start out with 2 premade presets.
 
-            AddPreset("Preset 1", MINPRESSURE);
-            AddPreset("Preset 2", MAXPRESSURE);
+            AddPreset("Preset 1", Constants.MINPRESSURE);
+            AddPreset("Preset 2", Constants.MAXPRESSURE);
 
             #endregion
 
@@ -176,7 +313,7 @@ namespace Main
             #region Back Button
 
             editPressureTextLayout1 = new LinearLayout(this);
-            layout.AddView(editPressureTextLayout1);
+            Global.layout.AddView(editPressureTextLayout1);
             editPressureTextLayout1.Orientation = Orientation.Horizontal;
             editPressureTextLayout1.SetGravity(Android.Views.GravityFlags.Left);
             editPressureTextLayout1.SetPadding((int)(Resources.DisplayMetrics.WidthPixels * 0.04), (int)(Resources.DisplayMetrics.HeightPixels * 0.04), 0, 0);
@@ -193,7 +330,7 @@ namespace Main
             #region Preset Name
 
             editPressureTextLayout2 = new LinearLayout(this);
-            layout.AddView(editPressureTextLayout2);
+            Global.layout.AddView(editPressureTextLayout2);
             editPressureTextLayout2.Orientation = Orientation.Horizontal;
             editPressureTextLayout2.SetGravity(Android.Views.GravityFlags.Center);
             editPressureTextLayout2.SetPadding(0, 0, 0, 0);
@@ -210,7 +347,7 @@ namespace Main
             #region Pressure Value
 
             editPressureTextLayout3 = new LinearLayout(this);
-            layout.AddView(editPressureTextLayout3);
+            Global.layout.AddView(editPressureTextLayout3);
             editPressureTextLayout3.Orientation = Orientation.Horizontal;
             editPressureTextLayout3.SetGravity(Android.Views.GravityFlags.Center);
             editPressureTextLayout3.SetPadding(0, 0, 0, 0);
@@ -233,7 +370,7 @@ namespace Main
             #region Seek Bar
 
             editPressureTextLayout4 = new LinearLayout(this);
-            layout.AddView(editPressureTextLayout4);
+            Global.layout.AddView(editPressureTextLayout4);
             editPressureTextLayout4.Orientation = Orientation.Horizontal;
             editPressureTextLayout4.SetGravity(Android.Views.GravityFlags.Center);
             editPressureTextLayout4.SetPadding(0, 0, 0, 0);
@@ -249,7 +386,7 @@ namespace Main
             #region Set Button
 
             editPressureTextLayout5 = new LinearLayout(this);
-            layout.AddView(editPressureTextLayout5);
+            Global.layout.AddView(editPressureTextLayout5);
             editPressureTextLayout5.Orientation = Orientation.Horizontal;
             editPressureTextLayout5.SetGravity(Android.Views.GravityFlags.Center);
             editPressureTextLayout5.SetPadding(0, 20, 0, 0);
@@ -273,38 +410,82 @@ namespace Main
             LoadMainViews();
         }
 
+        public void TryGetLocation()
+        {
+            int Sdk = (int)Build.VERSION.SdkInt;
+
+            if (Sdk < 23)
+            {
+                // Sdk must be at least 23.
+                return;
+            }
+            else
+            {
+                // Obtaining permissions...
+            }
+
+            GetLocationPermission();
+        }
+
+        readonly string[] PermissionsLocation =
+        {
+            Manifest.Permission.AccessCoarseLocation,
+            Manifest.Permission.AccessFineLocation
+        };
+
+        const int RequestLocationId = 0;
+
+        public void GetLocationPermission()
+        {
+            const string permission = Manifest.Permission.AccessFineLocation;
+
+            if (CheckSelfPermission(permission) == (int)Permission.Granted)
+            {
+                // All permissions have been previously granted.
+                return;
+            }
+
+            // Requesting permissions...
+            RequestPermissions(PermissionsLocation, RequestLocationId);
+        }
+
         private void RefreshView()
         {
             // Refresh Current Pressure.
-            this.RunOnUiThread((() => currentPressureView.Text = "Current Pressure: " + currentPressure + " psi"));
+            this.RunOnUiThread((() => currentPressureView.Text = "Current Pressure: " + Global.currentPressure + " psi"));
 
             // Refresh Target Pressure.
-            this.RunOnUiThread((() => targetPressureView.Text = "Target Pressure: " + targetPressure + " psi"));
+            this.RunOnUiThread((() => targetPressureView.Text = "Target Pressure: " + Global.targetPressure + " psi"));
 
             // Refresh Status.
-            if (currentPressure < targetPressure)
+            if (Global.status == 0)
+            {
+                this.RunOnUiThread((() => statusView.Text = "Initializing..."));
+            }
+
+            if (Global.status == 1)
             {
                 this.RunOnUiThread((() => statusView.Text = "Pressurizing..."));
             }
 
-            if (currentPressure > targetPressure)
+            if (Global.status == 2)
             {
                 this.RunOnUiThread((() => statusView.Text = "Releasing..."));
             }
 
-            if (currentPressure == targetPressure)
+            if (Global.status == 3)
             {
                 this.RunOnUiThread((() => statusView.Text = "Pressure stabilized."));
             }
 
             try
             {
-                if (Presets.Count >= MAXPRESETS)
+                if (Global.Presets.Count >= Constants.MAXPRESETS)
                 {
                     addButton.Visibility = Android.Views.ViewStates.Invisible;
                 }
 
-                if (Presets.Count < MAXPRESETS)
+                if (Global.Presets.Count < Constants.MAXPRESETS)
                 {
                     addButton.Visibility = Android.Views.ViewStates.Visible;
                 }
@@ -314,18 +495,9 @@ namespace Main
 
         private void Update()
         {
-            // Update Current Pressure from Bluetooth every 200 ms.
+            mReceiver.Write(ConvertDataOut(Global.targetPressure, Global.forceIdle));
 
-            // Code snippit to test pressure changes:
-            if (currentPressure < targetPressure)
-            {
-                currentPressure += 1;
-            }
-
-            if (currentPressure > targetPressure)
-            {
-                currentPressure -= 1;
-            }
+            ConvertDataIn(mReceiver.Read());
         }
 
         private void ActivateButtonClick(object sender, System.EventArgs e)
@@ -333,14 +505,14 @@ namespace Main
             Java.Lang.Object tag;
             Java.Lang.Object senderTag;
 
-            for (int i = 0; i < Presets.Count; i++)
+            for (int i = 0; i < Global.Presets.Count; i++)
             {
                 tag = "Activate Button " + (i + 1).ToString();
                 senderTag = (sender as Button).Tag;
 
                 if (senderTag.ToString() == tag.ToString())
                 {
-                    targetPressure = PresetVals[i];
+                    Global.targetPressure = Global.PresetVals[i];
                 }
             }
         }
@@ -352,7 +524,7 @@ namespace Main
             Java.Lang.Object tag;
             Java.Lang.Object senderTag;
 
-            for (int i = 0; i < Presets.Count; i++)
+            for (int i = 0; i < Global.Presets.Count; i++)
             {
                 tag = "Edit Button " + (i + 1).ToString();
                 senderTag = (sender as ImageButton).Tag.ToString();
@@ -369,7 +541,7 @@ namespace Main
             Java.Lang.Object tag;
             Java.Lang.Object senderTag;
 
-            for (int i = 0; i < Presets.Count; i++)
+            for (int i = 0; i < Global.Presets.Count; i++)
             {
                 tag = "Delete Button " + (i + 1).ToString();
                 senderTag = (sender as ImageButton).Tag;
@@ -387,7 +559,7 @@ namespace Main
             NewPreset = true;
 
             string name = "Preset " + (PresetsCount + 1).ToString();
-            int value = MINPRESSURE;
+            int value = Constants.MINPRESSURE;
 
             LoadEditViews(name, value);
         }
@@ -411,14 +583,14 @@ namespace Main
             else
             {
                 Button activateButton = new Button(this);
-                activateButton = (Button)Presets[CurrentIndex].FindViewWithTag("Activate Button " + (CurrentIndex + 1).ToString());
+                activateButton = (Button)Global.Presets[CurrentIndex].FindViewWithTag("Activate Button " + (CurrentIndex + 1).ToString());
                 activateButton.Text = CurrentName;
 
                 TextView presetText = new TextView(this);
-                presetText = (TextView)Presets[CurrentIndex].FindViewWithTag("Preset Text " + (CurrentIndex + 1).ToString());
+                presetText = (TextView)Global.Presets[CurrentIndex].FindViewWithTag("Preset Text " + (CurrentIndex + 1).ToString());
                 presetText.Text = CurrentValue.ToString() + " psi";
 
-                PresetVals[CurrentIndex] = CurrentValue;
+                Global.PresetVals[CurrentIndex] = CurrentValue;
             }
 
             NewPreset = false;
@@ -430,12 +602,12 @@ namespace Main
 
             // Extract name from preset at given index.
             Java.Lang.Object activateTag = "Activate Button " + (index + 1).ToString();
-            Button activateButton = (Button)Presets[index].FindViewWithTag(activateTag);
+            Button activateButton = (Button)Global.Presets[index].FindViewWithTag(activateTag);
             string name = activateButton.Text;
 
             // Extract value from preset at given index.
             Java.Lang.Object presetTextTag = "Preset Text " + (index + 1).ToString();
-            TextView presetValue = (TextView)Presets[index].FindViewWithTag(presetTextTag);
+            TextView presetValue = (TextView)Global.Presets[index].FindViewWithTag(presetTextTag);
             int value = System.Int32.Parse(presetValue.Text.Substring(0, presetValue.Text.Length - 4)); // Extract value from TextView.
 
             LoadEditViews(name, value);
@@ -465,7 +637,7 @@ namespace Main
             }
             catch
             {
-                CurrentValue = MINPRESSURE;
+                CurrentValue = Constants.MINPRESSURE;
             }
 
             // If changing pressure text, update seek bar position.
@@ -484,13 +656,13 @@ namespace Main
 
         private void DeletePreset(int index)
         {
-            layout.RemoveView(Presets[index]);
+            Global.layout.RemoveView(Global.Presets[index]);
 
-            Presets.RemoveAt(index);
-            ActivateButtons.RemoveAt(index);
-            EditButtons.RemoveAt(index);
-            DeleteButtons.RemoveAt(index);
-            PresetVals.RemoveAt(index);
+            Global.Presets.RemoveAt(index);
+            Global.ActivateButtons.RemoveAt(index);
+            Global.EditButtons.RemoveAt(index);
+            Global.DeleteButtons.RemoveAt(index);
+            Global.PresetVals.RemoveAt(index);
 
             ShiftTagsAfterDelete(index);
         }
@@ -508,26 +680,26 @@ namespace Main
             Java.Lang.Object newDeleteTag;
 
             // Shift every preset tag, starting at the index of the previously removed index.
-            for (int i = deletedIndex; i < Presets.Count; i++)
+            for (int i = deletedIndex; i < Global.Presets.Count; i++)
             {
                 oldActivateTag = "Activate Button " + (i + 2).ToString();
                 newActivateTag = "Activate Button " + (i + 1).ToString();
-                Button activateButton = (Button)Presets[i].FindViewWithTag(oldActivateTag);
+                Button activateButton = (Button)Global.Presets[i].FindViewWithTag(oldActivateTag);
                 activateButton.Tag = newActivateTag;
 
                 oldPresetTextTag = "Preset Text " + (i + 2).ToString();
                 newPresetTextTag = "Preset Text " + (i + 1).ToString();
-                TextView presetText = (TextView)Presets[i].FindViewWithTag(oldPresetTextTag);
+                TextView presetText = (TextView)Global.Presets[i].FindViewWithTag(oldPresetTextTag);
                 presetText.Tag = newPresetTextTag;
 
                 oldEditTag = "Edit Button " + (i + 2).ToString();
                 newEditTag = "Edit Button " + (i + 1).ToString();
-                ImageButton editButton = (ImageButton)Presets[i].FindViewWithTag(oldEditTag);
+                ImageButton editButton = (ImageButton)Global.Presets[i].FindViewWithTag(oldEditTag);
                 editButton.Tag = newEditTag;
 
                 oldDeleteTag = "Delete Button " + (i + 2).ToString();
                 newDeleteTag = "Delete Button " + (i + 1).ToString();
-                ImageButton deleteButton = (ImageButton)Presets[i].FindViewWithTag(oldDeleteTag);
+                ImageButton deleteButton = (ImageButton)Global.Presets[i].FindViewWithTag(oldDeleteTag);
                 deleteButton.Tag = newDeleteTag;
             }
         }
@@ -537,52 +709,52 @@ namespace Main
             PresetsCount++;
 
             // Add preset value to PresetVals.
-            PresetVals.Add(val);
+            Global.PresetVals.Add(val);
 
             // Remove 'Add' button and all existing presets from view.
 
             // Remove 'Add' button from view.
-            layout.RemoveView(addButton);
+            Global.layout.RemoveView(addButton);
 
             // Remove all existing presets from view.
-            foreach (LinearLayout preset in Presets)
+            foreach (LinearLayout preset in Global.Presets)
             {
-                layout.RemoveView(preset);
+                Global.layout.RemoveView(preset);
             }
 
             // Add 'Add' button and all presets back to view.
 
             // Add in new preset. Index tags starting at 1, to n.
-            Presets.Add(CreateLayout(name, val, Presets.Count + 1));
+            Global.Presets.Add(CreateLayout(name, val, Global.Presets.Count + 1));
 
             // Add all presets back to view.
-            foreach (LinearLayout preset in Presets)
+            foreach (LinearLayout preset in Global.Presets)
             {
-                layout.AddView(preset);
+                Global.layout.AddView(preset);
             }
 
             // Add 'Add' button to view.
-            layout.AddView(addButton);
+            Global.layout.AddView(addButton);
 
             // Set tags and click events for all buttons in preset.
-            int i = Presets.Count;
+            int i = Global.Presets.Count;
 
             Java.Lang.Object activateTag = "Activate Button " + i.ToString();
-            Button activateButton = (Button)Presets[i - 1].FindViewWithTag(activateTag);
+            Button activateButton = (Button)Global.Presets[i - 1].FindViewWithTag(activateTag);
             activateButton.Click += ActivateButtonClick;
-            ActivateButtons.Add(activateButton);
+            Global.ActivateButtons.Add(activateButton);
 
             Java.Lang.Object presetTextTag = "Preset Text " + i.ToString();
 
             Java.Lang.Object editTag = "Edit Button " + i.ToString();
-            ImageButton editButton = (ImageButton)Presets[i - 1].FindViewWithTag(editTag);
+            ImageButton editButton = (ImageButton)Global.Presets[i - 1].FindViewWithTag(editTag);
             editButton.Click += EditButtonClick;
-            EditButtons.Add(editButton);
+            Global.EditButtons.Add(editButton);
 
             Java.Lang.Object deleteTag = "Delete Button " + i.ToString();
-            ImageButton deleteButton = (ImageButton)Presets[i - 1].FindViewWithTag(deleteTag);
+            ImageButton deleteButton = (ImageButton)Global.Presets[i - 1].FindViewWithTag(deleteTag);
             deleteButton.Click += DeleteButtonClick;
-            DeleteButtons.Add(deleteButton);
+            Global.DeleteButtons.Add(deleteButton);
         }
 
         private void LoadMainViews()
@@ -598,11 +770,11 @@ namespace Main
                 editPressureTextLayout4.RemoveView(seekBar);
                 editPressureTextLayout5.RemoveView(setButton);
 
-                layout.RemoveView(editPressureTextLayout1);
-                layout.RemoveView(editPressureTextLayout2);
-                layout.RemoveView(editPressureTextLayout3);
-                layout.RemoveView(editPressureTextLayout4);
-                layout.RemoveView(editPressureTextLayout5);
+                Global.layout.RemoveView(editPressureTextLayout1);
+                Global.layout.RemoveView(editPressureTextLayout2);
+                Global.layout.RemoveView(editPressureTextLayout3);
+                Global.layout.RemoveView(editPressureTextLayout4);
+                Global.layout.RemoveView(editPressureTextLayout5);
             }
             catch { };
 
@@ -612,18 +784,18 @@ namespace Main
 
             try
             {
-                layout.AddView(vMargin1);
-                layout.AddView(currentPressureView);
-                layout.AddView(targetPressureView);
-                layout.AddView(statusView);
-                layout.AddView(vMargin2);
+                Global.layout.AddView(vMargin1);
+                Global.layout.AddView(currentPressureView);
+                Global.layout.AddView(targetPressureView);
+                Global.layout.AddView(statusView);
+                Global.layout.AddView(vMargin2);
 
-                foreach (LinearLayout preset in Presets)
+                foreach (LinearLayout preset in Global.Presets)
                 {
-                    layout.AddView(preset);
+                    Global.layout.AddView(preset);
                 }
 
-                layout.AddView(addButton);
+                Global.layout.AddView(addButton);
             }
             catch { };
 
@@ -639,18 +811,18 @@ namespace Main
 
             try
             {
-                layout.RemoveView(vMargin1);
-                layout.RemoveView(currentPressureView);
-                layout.RemoveView(targetPressureView);
-                layout.RemoveView(statusView);
-                layout.RemoveView(vMargin2);
+                Global.layout.RemoveView(vMargin1);
+                Global.layout.RemoveView(currentPressureView);
+                Global.layout.RemoveView(targetPressureView);
+                Global.layout.RemoveView(statusView);
+                Global.layout.RemoveView(vMargin2);
 
-                foreach (LinearLayout preset in Presets)
+                foreach (LinearLayout preset in Global.Presets)
                 {
-                    layout.RemoveView(preset);
+                    Global.layout.RemoveView(preset);
                 }
 
-                layout.RemoveView(addButton);
+                Global.layout.RemoveView(addButton);
             }
             catch { };
 
@@ -660,11 +832,11 @@ namespace Main
 
             try
             {
-                layout.AddView(editPressureTextLayout1);
-                layout.AddView(editPressureTextLayout2);
-                layout.AddView(editPressureTextLayout3);
-                layout.AddView(editPressureTextLayout4);
-                layout.AddView(editPressureTextLayout5);
+                Global.layout.AddView(editPressureTextLayout1);
+                Global.layout.AddView(editPressureTextLayout2);
+                Global.layout.AddView(editPressureTextLayout3);
+                Global.layout.AddView(editPressureTextLayout4);
+                Global.layout.AddView(editPressureTextLayout5);
 
                 editPressureTextLayout1.AddView(backButton);
                 editPressureTextLayout2.AddView(editPressureName);
@@ -779,12 +951,480 @@ namespace Main
 
         private int ConvertToPSIRange(int progress)
         {
-            return (int)(((float)progress / 100) * (MAXPRESSURE - MINPRESSURE) + MINPRESSURE);
+            return (int)(((float)progress / 100) * (Constants.MAXPRESSURE - Constants.MINPRESSURE) + Constants.MINPRESSURE);
         }
 
         private int ConvertToProgress(string editPressureText)
         {
-            return (int)(((float)System.Int32.Parse(editPressureText) - MINPRESSURE) / (MAXPRESSURE - MINPRESSURE) * 100);
+            return (int)(((float)System.Int32.Parse(editPressureText) - Constants.MINPRESSURE) / (Constants.MAXPRESSURE - Constants.MINPRESSURE) * 100);
+        }
+
+        private Int32 ConvertDataOut(int targetPressure, bool forceIdle = false)
+        {
+            // Array to hold data, in bytes.
+            byte[] dataBytes = new byte[4];
+
+            // Array to hold data, in bits.
+            var dataBits = new System.Collections.BitArray(dataBytes);
+
+            // Set target pressure bits.
+            string binary = Convert.ToString(targetPressure, 2);
+            int length = binary.Length;
+
+            for (int i = 0; i < length; i++)
+            {
+                bool value = false;
+
+                if (binary.Substring(length - i - 1, 1) == "1")
+                {
+                    value = true;
+                }
+
+                dataBits.Set(i, value);
+            }
+
+            // Set Force Idle bit.
+            dataBits.Set(16, forceIdle);
+
+            // Copy bit array to byte array.
+            dataBits.CopyTo(dataBytes, 0);
+
+            // Convert data to Int32.
+            Int32 output = BitConverter.ToInt32(dataBytes, 0);
+
+            return output;
+        }
+
+        private void ConvertDataIn(string input)
+        {
+            // Convert Int32 to data values.
+
+            if (input == null)
+            {
+                return;
+            }
+
+            // Set Current Pressure from input[13:0].
+            Global.currentPressure = Convert.ToInt32(input.Substring(0, 14));
+
+            // Set Pressure Sensor Fault Flag from input[16].
+            Global.pressureFault = Convert.ToBoolean(input[16]);
+
+            // Set Status from input[18:17].
+            switch (Convert.ToInt32(input.Substring(17, 2)))
+            {
+                case 1:
+                    {
+                        // Idle.
+                        Global.status = 1;
+                        break;
+                    }
+                case 2:
+                    {
+                        // Releasing.
+                        Global.status = 2;
+                        break;
+                    }
+                case 3:
+                    {
+                        // Pressurizing.
+                        Global.status = 3;
+                        break;
+                    }
+                default:
+                    {
+                        // Initializing.
+                        Global.status = 0;
+                        break;
+                    }
+            }
+
+            // Set Battery Shutdown from input[19].
+            Global.batteryShutdown = Convert.ToBoolean(input[19]);
+        }
+    }
+
+    public class BluetoothDeviceReceiver : BroadcastReceiver
+    {
+        public BluetoothAdapter mBluetoothAdapter { get; set; }
+        public BluetoothGatt mBluetoothGatt;
+
+        private string btAddress = "CC:78:AB:83:3C:06";
+        private bool found = false;
+
+        private GattCallback mGattCallback = new GattCallback();
+
+        public override void OnReceive(Context context, Intent intent)
+        {
+            string action = intent.Action;
+
+            if (action == BluetoothDevice.ActionFound)
+            {
+                // Discovery has found a device. Get the BluetoothDevice object and its info from the Intent.
+                BluetoothDevice device = (BluetoothDevice)intent.GetParcelableExtra(BluetoothDevice.ExtraDevice);
+
+                string deviceName = device.Name;
+                string deviceAddress = device.Address;
+
+                if (deviceAddress == btAddress)
+                {
+                    found = true;
+
+                    // Device was found.
+
+                    // Cancelling discovery...
+                    mBluetoothAdapter.CancelDiscovery();
+
+                    mBluetoothGatt = device.ConnectGatt(context, false, mGattCallback);
+
+                    mGattCallback.mBluetoothAdapter = mBluetoothAdapter;
+                    mGattCallback.mBluetoothDeviceAddress = deviceAddress;
+                    mGattCallback.mBluetoothGatt = mBluetoothGatt;
+                }
+            }
+
+            if (action == BluetoothAdapter.ActionDiscoveryStarted)
+            {
+                // Discovery started...
+            }
+
+            if (action == BluetoothAdapter.ActionDiscoveryFinished)
+            {
+                // Discovery finished.
+
+                if (!found)
+                {
+                    // Device was not found.
+                }
+            }
+        }
+
+        public string Read()
+        {
+            // Returns input if Read operation is successful; returns null otherwise.
+
+            try
+            {
+                return mGattCallback.Read();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public bool Write(Int32 output)
+        {
+            // Returns true if Write operation is successful; returns false otherwise.
+
+            try
+            {
+                return mGattCallback.Write(output);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
+    public class BluetoothLeService : Service
+    {
+        public const string ACTION_GATT_CONNECTED =
+            "com.example.bluetooth.le.ACTION_GATT_CONNECTED";
+        public const string ACTION_GATT_DISCONNECTED =
+            "com.example.bluetooth.le.ACTION_GATT_DISCONNECTED";
+        public const string ACTION_GATT_SERVICES_DISCOVERED =
+            "com.example.bluetooth.le.ACTION_GATT_SERVICES_DISCOVERED";
+        public const string ACTION_DATA_AVAILABLE =
+            "com.example.bluetooth.le.ACTION_DATA_AVAILABLE";
+        public const string EXTRA_DATA =
+            "com.example.bluetooth.le.EXTRA_DATA";
+
+        public const int STATE_DISCONNECTED = 0;
+        public const int STATE_CONNECTING = 1;
+        public const int STATE_CONNECTED = 2;
+        public const int STATE_DISCONNECTING = 3;
+
+        private IBinder mBinder = new LocalBinder();
+
+        public override IBinder OnBind(Intent intent)
+        {
+            return mBinder;
+        }
+    }
+
+    public class LocalBinder : Android.OS.Binder
+    {
+        BluetoothLeService GetService()
+        {
+            return (BluetoothLeService)BluetoothLeService.BluetoothService;
+        }
+    }
+
+    // Various callback methods defined by the BLE API.
+    public class GattCallback : BluetoothGattCallback
+    {
+        public BluetoothManager mBluetoothManager { get; set; }
+        public BluetoothAdapter mBluetoothAdapter { get; set; }
+        public string mBluetoothDeviceAddress { get; set; }
+        public BluetoothGatt mBluetoothGatt { get; set; }
+
+        public int mConnectionState = BluetoothLeService.STATE_DISCONNECTED;
+
+        public GattUpdateReceiver mGattUpdateReveiver = new GattUpdateReceiver();
+
+        public DeviceControlActivity mDeviceControlActivity = new DeviceControlActivity();
+        public BluetoothGattCharacteristic mGattCharacteristic;
+
+        public string data;
+
+        public override void OnConnectionStateChange(BluetoothGatt gatt, GattStatus status, ProfileState newState)
+        {
+            base.OnConnectionStateChange(gatt, status, newState);
+
+            string intentAction;
+
+            if (newState == ProfileState.Connected)
+            {
+                intentAction = BluetoothLeService.ACTION_GATT_CONNECTED;
+                mConnectionState = BluetoothLeService.STATE_CONNECTED;
+                BroadcastUpdate(intentAction);
+
+                // Connected to GATT server.
+                // Attempting to start servce discovery...
+
+                try
+                {
+                    mBluetoothGatt.DiscoverServices();
+                }
+                catch
+                {
+                    // Remote service discovery could not be started.
+                }
+            }
+            else if (newState == ProfileState.Disconnected)
+            {
+                intentAction = BluetoothLeService.ACTION_GATT_DISCONNECTED;
+                mConnectionState = BluetoothLeService.STATE_CONNECTED;
+                // Disconnected from GATT server.
+                BroadcastUpdate(intentAction);
+            }
+        }
+
+        // New services discovered.
+        public override void OnServicesDiscovered(BluetoothGatt gatt, GattStatus status)
+        {
+            base.OnServicesDiscovered(gatt, status);
+
+            if (status == GattStatus.Success)
+            {
+                // Service discovery successful.
+                BroadcastUpdate(BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED);
+
+                // Gathering available GATT services...
+                mDeviceControlActivity.DisplayGattServices(gatt.Services);
+
+                // Read/Write commands may now be issued.
+            }
+            else
+            {
+                // Service discovery failed.
+            }
+        }
+
+        // Result of a characteristic read operation.
+        public override void OnCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, GattStatus status)
+        {
+            base.OnCharacteristicRead(gatt, characteristic, status);
+
+            if (status == GattStatus.Success)
+            {
+                BroadcastUpdate(BluetoothLeService.ACTION_DATA_AVAILABLE, characteristic);
+            }
+        }
+
+        public override void OnCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, [GeneratedEnum] GattStatus status)
+        {
+            base.OnCharacteristicWrite(gatt, characteristic, status);
+
+            if (status == GattStatus.Success)
+            {
+                BroadcastUpdate(BluetoothLeService.ACTION_DATA_AVAILABLE, characteristic);
+            }
+        }
+
+        private void BroadcastUpdate(string action)
+        {
+            Intent intent = new Intent(action);
+
+            // Send broadcast.
+            ;
+        }
+
+        private void BroadcastUpdate(string action, BluetoothGattCharacteristic characteristic)
+        {
+            Intent intent = new Intent(action);
+
+            // Special handling goes here.
+            data = characteristic.GetStringValue(0);
+
+            // Send broadcast.
+            ;
+        }
+
+        public string Read()
+        {
+            // Returns input if Read operation is successful; returns null otherwise.
+
+            string input = null;
+
+            // Check if mDeviceControlActivity has been instantiated.
+            if (mDeviceControlActivity == null)
+            {
+                return input;
+            }
+
+            mGattCharacteristic = mDeviceControlActivity.mGattCharacteristics[5][0];
+
+            if (mBluetoothGatt.ReadCharacteristic(mGattCharacteristic))
+            {
+                // Read operation successful.
+
+                // Return the data received from callback.
+                input = this.data;
+            }
+            else
+            {
+                // Read operation failed.
+            }
+
+            return input;
+        }
+
+        public bool Write(Int32 output)
+        {
+            // Returns true if Write operation is successful; returns false otherwise.
+
+            // Check if mDeviceControlActivity has been instantiated.
+            if (mDeviceControlActivity == null)
+            {
+                return false;
+            }
+
+            mGattCharacteristic = mDeviceControlActivity.mGattCharacteristics[5][0];
+
+            mGattCharacteristic.SetValue(output, GattFormat.Uint32, 0);
+
+            BluetoothGattDescriptor mDescriptor = mGattCharacteristic.GetDescriptor(UUID.FromString("f0001131-0451-4000-b000-000000000000"));
+
+            if (mBluetoothGatt.WriteCharacteristic(mGattCharacteristic))
+            {
+                // Write operation successful.
+
+                return true;
+            }
+            else
+            {
+                // Write operation failed.
+
+                return false;
+            }
+        }
+    }
+
+    public class GattUpdateReceiver : BroadcastReceiver
+    {
+        public override void OnReceive(Context context, Intent intent)
+        {
+            string action = intent.Action;
+
+            if (BluetoothLeService.ACTION_GATT_CONNECTED.Equals(action))
+            {
+                // mConnected = true;
+                ;
+                // updateConnectionState(R.string.connected);
+                ;
+                // invalidateOptionsMenu();
+                ;
+            }
+            else if (BluetoothLeService.ACTION_GATT_DISCONNECTED.Equals(action))
+            {
+                // mConnected = false;
+                ;
+                // updateConnectionState(R.string.disconnected);
+                ;
+                // invalidateOptionsMenu();
+                ;
+                // clearUI();
+                ;
+            }
+            else if (BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED.Equals(action))
+            {
+                // displayGattServices(mBluetoothLeService.getSupportedGattServices());
+                ;
+            }
+            else if (BluetoothLeService.ACTION_DATA_AVAILABLE.Equals(action))
+            {
+                string data = intent.GetStringExtra(BluetoothLeService.EXTRA_DATA);
+            }
+        }
+    }
+
+    public class DeviceControlActivity : Activity
+    {
+        public List<IList<BluetoothGattCharacteristic>> mGattCharacteristics;
+
+        public void DisplayGattServices(IList<BluetoothGattService> gattServices)
+        {
+            if (gattServices == null)
+            {
+                return;
+            }
+
+            string uuid = null;
+            IList<HashMap> gattServiceData = new List<HashMap>();
+            IList<IList<HashMap>> gattCharacteristicData = new List<IList<HashMap>>();
+            mGattCharacteristics = new List<IList<BluetoothGattCharacteristic>>();
+
+            // Loops through available GATT Services.
+            foreach (BluetoothGattService gattService in gattServices)
+            {
+                HashMap currentServiceData = new HashMap();
+
+                string unknownServiceString = "Unknown Service";
+
+                uuid = gattService.Uuid.ToString();
+
+                currentServiceData.Put(Constants.LIST_NAME, SampleGattAttributes.Lookup(uuid, unknownServiceString));
+                currentServiceData.Put(Constants.LIST_UUID, uuid);
+
+                gattServiceData.Add(currentServiceData);
+
+                IList<HashMap> gattCharacteristicGroupData = new List<HashMap>();
+                IList<BluetoothGattCharacteristic> gattCharacteristics = gattService.Characteristics;
+                IList<BluetoothGattCharacteristic> charas = new List<BluetoothGattCharacteristic>();
+
+                // Loops through available characteristics.
+                foreach (BluetoothGattCharacteristic gattCharacteristic in gattCharacteristics)
+                {
+                    charas.Add(gattCharacteristic);
+
+                    HashMap currentCharaData = new HashMap();
+
+                    string unknownCharaString = "Unknown Characteristic";
+
+                    uuid = gattCharacteristic.Uuid.ToString();
+
+                    currentCharaData.Put(Constants.LIST_NAME, SampleGattAttributes.Lookup(uuid, unknownCharaString));
+                    currentCharaData.Put(Constants.LIST_UUID, uuid);
+
+                    gattCharacteristicGroupData.Add(currentCharaData);
+                }
+
+                mGattCharacteristics.Add(charas);
+                gattCharacteristicData.Add(gattCharacteristicGroupData);
+            }
         }
     }
 }

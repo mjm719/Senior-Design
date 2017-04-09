@@ -254,7 +254,7 @@ namespace BluetoothLE
 
         private void Write(object sender, EventArgs e)
         {
-            Int32 output = 0x4B435546;
+            Int32 output = ConvertDataOut(70);
 
             bool success = false;
 
@@ -263,8 +263,49 @@ namespace BluetoothLE
                 success = mReceiver.Write(output);
             }
             catch { };
+        }
 
-            Global.DebugText = Global.DebugText + "Write: " + success.ToString() + "\n";
+        private Int32 ConvertDataOut (int targetPressure, bool forceIdle = false)
+        {
+            // Array to hold data, in bytes.
+            byte[] dataBytes = new byte[4];
+
+            // Array to hold data, in bits.
+            var dataBits = new System.Collections.BitArray(dataBytes);
+
+            // Set target pressure bits.
+            string binary = Convert.ToString(targetPressure, 2);
+            int length = binary.Length;
+
+            for (int i = 0; i < length; i++)
+            {
+                bool value = false;
+
+                if (binary.Substring(length - i - 1, 1) == "1")
+                {
+                    value = true;
+                }
+
+                dataBits.Set(i, value);
+            }
+
+            // Set Force Idle bit.
+            dataBits.Set(16, forceIdle);
+
+            // Copy bit array to byte array.
+            dataBits.CopyTo(dataBytes, 0);
+
+            // Convert data to Int32.
+            Int32 output = BitConverter.ToInt32(dataBytes, 0);
+
+            Global.DebugText = Global.DebugText + "Output: " + output.ToString() + " (" + targetPressure + ", " + forceIdle.ToString() + ")\n";
+
+            return output;
+        }
+
+        private void ConvertDataIn(Int32 input)
+        {
+            // Convert Int32 to data values.
         }
 
         private void RefreshView()
