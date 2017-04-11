@@ -1,7 +1,9 @@
-﻿using Android.App;
+﻿using Android;
+using Android.App;
 using Android.Bluetooth;
 using Android.Bluetooth.LE;
 using Android.Content;
+using Android.Content.PM;
 using Android.OS;
 using Android.Views;
 using Android.Widget;
@@ -11,25 +13,76 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Threading.Tasks;
 using System.Timers;
+using Android.Runtime;
 
 namespace BluetoothLE
 {
     public static class Constants
     {
         public const int REQUEST_ENABLE_BT = 1;
+
+        public const string LIST_NAME = "NAME";
+        public const string LIST_UUID = "UUID";
+    }
+
+    public class Global
+    {
+        public static string DebugText = "";
+    }
+
+    public class SampleGattAttributes
+    {
+        public static string CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb";
+
+        private static Dictionary<string, string> Attributes = new Dictionary<string, string>()
+        {
+			// Sample Services.
+            {   "0000180a-0000-1000-8000-00805f9b34fb", "Device Information Service"    },
+            {   "f0001110-0451-4000-b000-000000000000", "LED Service"                   },
+            {   "f0001111-0451-4000-b000-000000000000", "LED0 State"                    },
+            {   "f0001112-0451-4000-b000-000000000000", "LED1 State"                    },
+            {   "f0001120-0451-4000-b000-000000000000", "Button Service"                },
+            {   "f0001121-0451-4000-b000-000000000000", "Button0 State"                 },
+            {   "f0001122-0451-4000-b000-000000000000", "Button1 State"                 },
+            {   "f0001130-0451-4000-b000-000000000000", "Data Service"                  },
+            {   "f0001131-0451-4000-b000-000000000000", "String char"                   },
+            {   "f0001132-0451-4000-b000-000000000000", "Stream char"                   },
+
+			// Sample Characteristics.
+            {   "00002a29-0000-1000-8000-00805f9b34fb", "Manufacturer Name String"      },
+        };
+
+        public static string Lookup(string key, string defaultName)
+        {
+            string name = defaultName;
+
+            try
+            {
+                name = Attributes[key];
+            }
+            catch { }
+
+            return name;
+        }
     }
 
     [Activity(Label = "Bluetooth LE Testing", MainLauncher = true, Icon = "@drawable/icon")]
     public class MainActivity : Activity
     {
-        private LinearLayout layout;
-        public TextView debugText;
+        public LinearLayout layout;
+        public Button readButton;
+        public Button writeButton;
+        public TextView debug;
 
-        private BluetoothAdapter mBluetoothAdapter;
+        public BluetoothAdapter mBluetoothAdapter;
         public static BluetoothManager mBluetoothManager;
+        public BluetoothDeviceReceiver mReceiver;
 
-        protected override void OnCreate(Bundle bundle)
+        System.Threading.Timer refresh;
+
+        protected override async void OnCreate(Bundle bundle)
         {
             base.OnCreate(bundle);
 
@@ -38,15 +91,36 @@ namespace BluetoothLE
             layout.SetGravity(Android.Views.GravityFlags.CenterHorizontal);
             SetContentView(layout);
 
-            debugText = new TextView(this);
-            layout.AddView(debugText);
-            debugText.Text += "Debugging...\n";
+            readButton = new Button(this);
+            layout.AddView(readButton);
+            readButton.Text = "Read";
+            readButton.Click += Read;
+
+            writeButton = new Button(this);
+            layout.AddView(writeButton);
+            writeButton.Text = "Write";
+            writeButton.Click += Write;
+
+            debug = new TextView(this);
+            layout.AddView(debug);
+            Global.DebugText += "Debugging...\n";
+
+            // Start refresh timer immediately, invoke callback every 10 ms.
+            // http://stackoverflow.com/questions/13019433/calling-method-on-every-x-minutes
+            refresh = new System.Threading.Timer(x => RefreshView(), null, 0, 10);
 
             #region Bluetooth Setup
 
             // Initializes Bluetooth adapter.
             mBluetoothManager = (BluetoothManager) GetSystemService(Context.BluetoothService);
             mBluetoothAdapter = mBluetoothManager.Adapter;
+
+            #region Permissions
+
+            // Request permissions, if not previously granted.
+            await TryGetLocationAsync();
+
+            #endregion
 
             #region BLE Setup
 
@@ -55,15 +129,15 @@ namespace BluetoothLE
 
             if (mBluetoothAdapter == null || !mBluetoothAdapter.IsEnabled)
             {
-                debugText.Text += "Bluetooth is not enabled on device.\n";
-                debugText.Text += "Requesting permission to enable Bluetooth on device...\n";
+                Global.DebugText += "Bluetooth is not enabled on device.\n";
+                Global.DebugText += "Requesting permission to enable Bluetooth on device...\n";
 
                 Intent enableBtIntent = new Intent(BluetoothAdapter.ActionRequestEnable);
                 StartActivityForResult(enableBtIntent, Constants.REQUEST_ENABLE_BT);
             }
             else if (mBluetoothAdapter.IsEnabled)
             {
-                debugText.Text += "Bluetooth is enabled on device.\n";
+                Global.DebugText += "Bluetooth is enabled on device.\n";
             }
 
             #endregion
@@ -72,7 +146,7 @@ namespace BluetoothLE
 
             #region Load Paired Devices
 
-            debugText.Text += "Loading paired devices...\n";
+            Global.DebugText += "Loading paired devices...\n";
 
             ICollection<BluetoothDevice> pairedDevices = mBluetoothAdapter.BondedDevices;
 
@@ -86,12 +160,12 @@ namespace BluetoothLE
                     string deviceName = device.Name;
                     string deviceAddress = device.Address;
 
-                    debugText.Text = debugText.Text + deviceName + " (" + deviceAddress + ")\n";
+                    Global.DebugText = Global.DebugText + deviceName + " (" + deviceAddress + ")\n";
                 }
             }
             else
             {
-                debugText.Text += "No paired devices were found.\n";
+                Global.DebugText += "No paired devices were found.\n";
             }
 
             #endregion
@@ -101,8 +175,7 @@ namespace BluetoothLE
             // BLE Discovery method has various missing classes/functions, so use the regular
             // Bluetooth Discovery implementation.
 
-            BluetoothDeviceReceiver mReceiver = new BluetoothDeviceReceiver();
-            mReceiver.debugText = debugText;
+            mReceiver = new BluetoothDeviceReceiver();
             mReceiver.mBluetoothAdapter = mBluetoothAdapter;
 
             IntentFilter filter_ActionFound = new IntentFilter(BluetoothDevice.ActionFound);
@@ -114,22 +187,143 @@ namespace BluetoothLE
             RegisterReceiver(mReceiver, filter_ActionDiscoveryFinished);
 
             // Start searching for devices.
-            debugText.Text += "Searching for discoverable devices...\n";
+            Global.DebugText += "Searching for discoverable devices...\n";
             mBluetoothAdapter.StartDiscovery();
 
             #endregion
+        }
+
+        async Task TryGetLocationAsync()
+        {
+            int Sdk = (int)Build.VERSION.SdkInt;
+
+            if (Sdk < 23)
+            {
+                Global.DebugText += "Sdk must be at least 23.\n";
+                return;
+            }
+            else
+            {
+                Global.DebugText += "Obtaining permissions...\n";
+            }
+
+            await GetLocationPermissionAsnyc();
+        }
+
+        readonly string[] PermissionsLocation =
+        {
+            Manifest.Permission.AccessCoarseLocation,
+            Manifest.Permission.AccessFineLocation
+        };
+
+        const int RequestLocationId = 0;
+
+        async Task GetLocationPermissionAsnyc()
+        {
+            const string permission = Manifest.Permission.AccessFineLocation;
+
+            if (CheckSelfPermission(permission) == (int)Permission.Granted)
+            {
+                Global.DebugText += "All permissions have been previously granted.\n";
+                return;
+            }
+
+            Global.DebugText += "Requesting permissions...\n";
+            RequestPermissions(PermissionsLocation, RequestLocationId);
+
+            await GetLocationPermissionAsnyc();
+        }
+
+        private void Read(object sender, EventArgs e)
+        {
+            string input = null;
+
+            try
+            {
+                input = mReceiver.Read();
+            }
+            catch { };
+
+            if (input == null)
+            {
+                input = "null";
+            }
+
+            Global.DebugText = Global.DebugText + "Read: " + input + "\n";
+        }
+
+        private void Write(object sender, EventArgs e)
+        {
+            Int32 output = ConvertDataOut(70);
+
+            bool success = false;
+
+            try
+            {
+                success = mReceiver.Write(output);
+            }
+            catch { };
+        }
+
+        private Int32 ConvertDataOut (int targetPressure, bool forceIdle = false)
+        {
+            // Array to hold data, in bytes.
+            byte[] dataBytes = new byte[4];
+
+            // Array to hold data, in bits.
+            var dataBits = new System.Collections.BitArray(dataBytes);
+
+            // Set target pressure bits.
+            string binary = Convert.ToString(targetPressure, 2);
+            int length = binary.Length;
+
+            for (int i = 0; i < length; i++)
+            {
+                bool value = false;
+
+                if (binary.Substring(length - i - 1, 1) == "1")
+                {
+                    value = true;
+                }
+
+                dataBits.Set(i, value);
+            }
+
+            // Set Force Idle bit.
+            dataBits.Set(16, forceIdle);
+
+            // Copy bit array to byte array.
+            dataBits.CopyTo(dataBytes, 0);
+
+            // Convert data to Int32.
+            Int32 output = BitConverter.ToInt32(dataBytes, 0);
+
+            Global.DebugText = Global.DebugText + "Output: " + output.ToString() + " (" + targetPressure + ", " + forceIdle.ToString() + ")\n";
+
+            return output;
+        }
+
+        private void ConvertDataIn(Int32 input)
+        {
+            // Convert Int32 to data values.
+        }
+
+        private void RefreshView()
+        {
+            // Refresh Debug Text.
+            this.RunOnUiThread((() => debug.Text = Global.DebugText));
         }
     }
 
     public class BluetoothDeviceReceiver : BroadcastReceiver
     {
-        public TextView debugText { get; set; }
         public BluetoothAdapter mBluetoothAdapter { get; set; }
+        public BluetoothGatt mBluetoothGatt;
 
         private string btAddress = "CC:78:AB:83:3C:06";
         private bool found = false;
 
-        private GattCallback mGattCallback;
+        private GattCallback mGattCallback = new GattCallback();
 
         public override void OnReceive(Context context, Intent intent)
         {
@@ -147,29 +341,61 @@ namespace BluetoothLE
                 {
                     found = true;
 
-                    debugText.Text += "Device was found.\n";
-                    debugText.Text = debugText.Text + deviceName + " (" + deviceAddress + ")\n";
-                    
-                    debugText.Text += "Cancelling discovery...\n";
+                    Global.DebugText += "Device was found.\n";
+                    Global.DebugText = Global.DebugText + deviceName + " (" + deviceAddress + ")\n";
+
+                    Global.DebugText += "Cancelling discovery...\n";
                     mBluetoothAdapter.CancelDiscovery();
 
-                    mGattCallback = new GattCallback();
+                    mBluetoothGatt = device.ConnectGatt(context, false, mGattCallback);
+
+                    mGattCallback.mBluetoothAdapter = mBluetoothAdapter;
+                    mGattCallback.mBluetoothDeviceAddress = deviceAddress;
+                    mGattCallback.mBluetoothGatt = mBluetoothGatt;
                 }
             }
 
             if (action == BluetoothAdapter.ActionDiscoveryStarted)
             {
-                debugText.Text += "Discovery started...\n";
+                Global.DebugText += "Discovery started...\n";
             }
 
             if (action == BluetoothAdapter.ActionDiscoveryFinished)
             {
-                debugText.Text += "Discovery finished.\n";
+                Global.DebugText += "Discovery finished.\n";
 
                 if (!found)
                 {
-                    debugText.Text += "Device was not found.\n";
+                    Global.DebugText += "Device was not found.\n";
                 }
+            }
+        }
+
+        public string Read()
+        {
+            // Returns input if Read operation is successful; returns null otherwise.
+
+            try
+            {
+                return mGattCallback.Read();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public bool Write(Int32 output)
+        {
+            // Returns true if Write operation is successful; returns false otherwise.
+
+            try
+            {
+                return mGattCallback.Write(output);
+            }
+            catch
+            {
+                return false;
             }
         }
     }
@@ -218,6 +444,13 @@ namespace BluetoothLE
 
         public int mConnectionState = BluetoothLeService.STATE_DISCONNECTED;
 
+        public GattUpdateReceiver mGattUpdateReveiver = new GattUpdateReceiver();
+
+        public DeviceControlActivity mDeviceControlActivity = new DeviceControlActivity();
+        public BluetoothGattCharacteristic mGattCharacteristic;
+
+        public string data;
+
         public override void OnConnectionStateChange(BluetoothGatt gatt, GattStatus status, ProfileState newState)
         {
             base.OnConnectionStateChange(gatt, status, newState);
@@ -228,18 +461,27 @@ namespace BluetoothLE
             {
                 intentAction = BluetoothLeService.ACTION_GATT_CONNECTED;
                 mConnectionState = BluetoothLeService.STATE_CONNECTED;
-                broadcastUpdate(intentAction);
-                // Connected to GATT server.
-                // Attempting to start service discovery...
-                mBluetoothGatt.DiscoverServices();
-                
+                BroadcastUpdate(intentAction);
+
+                Global.DebugText += "Connected to GATT server.\n";
+                Global.DebugText += "Attempting to start servce discovery...\n";
+
+                try
+                {
+                    mBluetoothGatt.DiscoverServices();
+                }
+                catch
+                {
+                    Global.DebugText += "Remote service discovery could not be started.\n";
+                }
             }
             else if (newState == ProfileState.Disconnected)
             {
                 intentAction = BluetoothLeService.ACTION_GATT_DISCONNECTED;
                 mConnectionState = BluetoothLeService.STATE_CONNECTED;
                 // Disconnected from GATT server.
-                broadcastUpdate(intentAction);
+                Global.DebugText += "Disconnected from GATT server.\n";
+                BroadcastUpdate(intentAction);
             }
         }
 
@@ -250,11 +492,17 @@ namespace BluetoothLE
 
             if (status == GattStatus.Success)
             {
-                broadcastUpdate(BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED);
+                Global.DebugText += "Service discovery successful.\n";
+                BroadcastUpdate(BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED);
+                
+                Global.DebugText += "Gathering available Gatt services...\n";
+                mDeviceControlActivity.DisplayGattServices(gatt.Services);
+
+                Global.DebugText += "Read/Write commands may now be issued.\n";
             }
             else
             {
-                // onServicesDiscovered received.
+                Global.DebugText += "Service discovery failed.\n";
             }
         }
 
@@ -265,11 +513,21 @@ namespace BluetoothLE
 
             if (status == GattStatus.Success)
             {
-                broadcastUpdate(BluetoothLeService.ACTION_DATA_AVAILABLE, characteristic);
+                BroadcastUpdate(BluetoothLeService.ACTION_DATA_AVAILABLE, characteristic);
             }
         }
 
-        private void broadcastUpdate(string action)
+        public override void OnCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, [GeneratedEnum] GattStatus status)
+        {
+            base.OnCharacteristicWrite(gatt, characteristic, status);
+
+            if (status == GattStatus.Success)
+            {
+                BroadcastUpdate(BluetoothLeService.ACTION_DATA_AVAILABLE, characteristic);
+            }
+        }
+
+        private void BroadcastUpdate(string action)
         {
             Intent intent = new Intent(action);
 
@@ -277,24 +535,83 @@ namespace BluetoothLE
             ;
         }
 
-        private void broadcastUpdate(string action, BluetoothGattCharacteristic characteristic)
+        private void BroadcastUpdate(string action, BluetoothGattCharacteristic characteristic)
         {
             Intent intent = new Intent(action);
 
             // Special handling goes here.
-            ;
+            data = characteristic.GetStringValue(0);
 
             // Send broadcast.
             ;
         }
+
+        public string Read()
+        {
+            // Returns input if Read operation is successful; returns null otherwise.
+
+            string input = null;
+
+            // Check if mDeviceControlActivity has been instantiated.
+            if (mDeviceControlActivity == null)
+            {
+                Global.DebugText += "mDeviceControlActivity has not been instatiated yet!\n";
+                return input;
+            }
+
+            mGattCharacteristic = mDeviceControlActivity.mGattCharacteristics[5][0];
+
+            if (mBluetoothGatt.ReadCharacteristic(mGattCharacteristic))
+            {
+                Global.DebugText += "Read operation successful.\n";
+
+                // Return the data received from callback.
+                input = this.data;
+            }
+            else
+            {
+                Global.DebugText += "Read operation failed.\n";
+            }
+
+            return input;
+        }
+
+        public bool Write(Int32 output)
+        {
+            // Returns true if Write operation is successful; returns false otherwise.
+
+            // Check if mDeviceControlActivity has been instantiated.
+            if (mDeviceControlActivity == null)
+            {
+                Global.DebugText += "mDeviceControlActivity has not been instatiated yet!\n";
+                return false;
+            }
+
+            mGattCharacteristic = mDeviceControlActivity.mGattCharacteristics[5][0];
+
+            mGattCharacteristic.SetValue(output, GattFormat.Uint32, 0);
+
+            BluetoothGattDescriptor mDescriptor = mGattCharacteristic.GetDescriptor(UUID.FromString("f0001131-0451-4000-b000-000000000000"));
+
+            if (mBluetoothGatt.WriteCharacteristic(mGattCharacteristic))
+            {
+                Global.DebugText += "Write operation successful.\n";
+
+                return true;
+            }
+            else
+            {
+                Global.DebugText += "Write operation failed.\n";
+
+                return false;
+            }
+        }
     }
 
-    public class mGattUpdateReceiver : BluetoothDeviceReceiver
+    public class GattUpdateReceiver : BroadcastReceiver
     {
         public override void OnReceive(Context context, Intent intent)
         {
-            base.OnReceive(context, intent);
-
             string action = intent.Action;
 
             if (BluetoothLeService.ACTION_GATT_CONNECTED.Equals(action))
@@ -324,8 +641,66 @@ namespace BluetoothLE
             }
             else if (BluetoothLeService.ACTION_DATA_AVAILABLE.Equals(action))
             {
-                // displayData(intent.getStringExtra(BluetoothService.EXTRA_DATA));
+                string data = intent.GetStringExtra(BluetoothLeService.EXTRA_DATA);
+
                 ;
+            }
+        }
+    }
+
+    public class DeviceControlActivity : Activity
+    {
+        public List<IList<BluetoothGattCharacteristic>> mGattCharacteristics;
+
+        public void DisplayGattServices(IList<BluetoothGattService> gattServices)
+        {
+            if (gattServices == null)
+            {
+                return;
+            }
+
+            string uuid = null;
+            IList<HashMap> gattServiceData = new List<HashMap>();
+            IList<IList<HashMap>> gattCharacteristicData = new List<IList<HashMap>>();
+            mGattCharacteristics = new List<IList<BluetoothGattCharacteristic>>();
+
+            // Loops through available GATT Services.
+            foreach (BluetoothGattService gattService in gattServices)
+            {
+                HashMap currentServiceData = new HashMap();
+
+                string unknownServiceString = "Unknown Service";
+
+                uuid = gattService.Uuid.ToString();
+
+                currentServiceData.Put(Constants.LIST_NAME, SampleGattAttributes.Lookup(uuid, unknownServiceString));
+                currentServiceData.Put(Constants.LIST_UUID, uuid);
+
+                gattServiceData.Add(currentServiceData);
+
+                IList<HashMap> gattCharacteristicGroupData = new List<HashMap>();
+                IList<BluetoothGattCharacteristic> gattCharacteristics = gattService.Characteristics;
+                IList<BluetoothGattCharacteristic> charas = new List<BluetoothGattCharacteristic>();
+
+                // Loops through available characteristics.
+                foreach (BluetoothGattCharacteristic gattCharacteristic in gattCharacteristics)
+                {
+                    charas.Add(gattCharacteristic);
+
+                    HashMap currentCharaData = new HashMap();
+
+                    string unknownCharaString = "Unknown Characteristic";
+
+                    uuid = gattCharacteristic.Uuid.ToString();
+                    
+                    currentCharaData.Put(Constants.LIST_NAME, SampleGattAttributes.Lookup(uuid, unknownCharaString));
+                    currentCharaData.Put(Constants.LIST_UUID, uuid);
+
+                    gattCharacteristicGroupData.Add(currentCharaData);
+                }
+
+                mGattCharacteristics.Add(charas);
+                gattCharacteristicData.Add(gattCharacteristicGroupData);
             }
         }
     }

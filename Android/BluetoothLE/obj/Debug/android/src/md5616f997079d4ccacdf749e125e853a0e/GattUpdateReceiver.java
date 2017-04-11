@@ -1,8 +1,8 @@
 package md5616f997079d4ccacdf749e125e853a0e;
 
 
-public class mGattUpdateReceiver
-	extends md5616f997079d4ccacdf749e125e853a0e.BluetoothDeviceReceiver
+public class GattUpdateReceiver
+	extends android.content.BroadcastReceiver
 	implements
 		mono.android.IGCUserPeer
 {
@@ -12,15 +12,15 @@ public class mGattUpdateReceiver
 		__md_methods = 
 			"n_onReceive:(Landroid/content/Context;Landroid/content/Intent;)V:GetOnReceive_Landroid_content_Context_Landroid_content_Intent_Handler\n" +
 			"";
-		mono.android.Runtime.register ("BluetoothLE.mGattUpdateReceiver, BluetoothLE, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", mGattUpdateReceiver.class, __md_methods);
+		mono.android.Runtime.register ("BluetoothLE.GattUpdateReceiver, BluetoothLE, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", GattUpdateReceiver.class, __md_methods);
 	}
 
 
-	public mGattUpdateReceiver () throws java.lang.Throwable
+	public GattUpdateReceiver () throws java.lang.Throwable
 	{
 		super ();
-		if (getClass () == mGattUpdateReceiver.class)
-			mono.android.TypeManager.Activate ("BluetoothLE.mGattUpdateReceiver, BluetoothLE, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", "", this, new java.lang.Object[] {  });
+		if (getClass () == GattUpdateReceiver.class)
+			mono.android.TypeManager.Activate ("BluetoothLE.GattUpdateReceiver, BluetoothLE, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", "", this, new java.lang.Object[] {  });
 	}
 
 

@@ -69,38 +69,66 @@
 //  Built with CCS Version 4.2.0 and IAR Embedded Workbench Version: 5.10
 //******************************************************************************
 #include <msp430.h>
+#include <stdio.h>
 
 unsigned char *PRxData;                     // Pointer to RX data
 unsigned char RXByteCtr;
-volatile unsigned char RxBuffer[2];       // Allocate 128 byte of RAM
+volatile unsigned char RxBuffer[2];       	// Allocate 128 byte of RAM
 
-int main(void)
-{
-  WDTCTL = WDTPW + WDTHOLD;                 // Stop WDT
-  P1SEL |= BIT6 + BIT7;                     // Assign I2C pins to USCI_B0
-  P1SEL2|= BIT6 + BIT7;                     // Assign I2C pins to USCI_B0
-  UCB0CTL1 |= UCSWRST;                      // Enable SW reset
-  UCB0CTL0 = UCMST + UCMODE_3 + UCSYNC;     // I2C Master, synchronous mode
-  UCB0CTL1 = UCSSEL_2 + UCSWRST;            // Use SMCLK, keep SW reset
-  UCB0BR0 = 12;                             // fSCL = SMCLK/12 = ~100kHz
-  UCB0BR1 = 0;
-  UCB0I2CSA = 0x28;                         // Slave Address is 048h
-  UCB0CTL1 &= ~UCSWRST;                     // Clear SW reset, resume operation
-  IE2 |= UCB0RXIE;                          // Enable RX interrupt
+unsigned int OutputMax = 0x3999;
+unsigned int OutputMin = 0x0666;
+unsigned char PMax = 150;
+unsigned char PMin = 1;
 
-  while (1)
-  {
-    PRxData = (unsigned char *)RxBuffer;    // Start of RX buffer
-    RXByteCtr = 2;                          // Load RX byte counter
-    while (UCB0CTL1 & UCTXSTP);             // Ensure stop condition got sent
-    UCB0CTL1 |= UCTXSTT;                    // I2C start condition
-    __bis_SR_register(CPUOFF + GIE);        // Enter LPM0 w/ interrupts
-                                            // Remain in LPM0 until all data
-                                            // is RX'd
-    __no_operation();                       // Set breakpoint >>here<< and
-    										// read out the RxBuffer buffer
-    __delay_cycles(500000);
-  }
+unsigned int Pressure;
+unsigned int Output;
+unsigned int OutputTemp;
+
+int main(void){
+	WDTCTL = WDTPW + WDTHOLD;                 // Stop WDT
+	P1SEL |= BIT6 + BIT7;                     // Assign I2C pins to USCI_B0
+	P1SEL2|= BIT6 + BIT7;                     // Assign I2C pins to USCI_B0
+	UCB0CTL1 |= UCSWRST;                      // Enable SW reset
+	UCB0CTL0 = UCMST + UCMODE_3 + UCSYNC;     // I2C Master, synchronous mode
+	UCB0CTL1 = UCSSEL_2 + UCSWRST;            // Use SMCLK, keep SW reset
+	UCB0BR0 = 12;                             // fSCL = SMCLK/12 = ~100kHz
+	UCB0BR1 = 0;
+	UCB0I2CSA = 0x28;                         // Slave Address is 028h
+	UCB0CTL1 &= ~UCSWRST;                     // Clear SW reset, resume operation
+	IE2 |= UCB0RXIE;                          // Enable RX interrupt
+
+	// Setup P2.0 as output for ambient valve and set low
+	P2SEL &= (~BIT0);
+	P2DIR |= BIT0;
+	P2OUT &= ~BIT0;
+
+	// Setup P2.2 as output for pressure sensor and set low
+	P2SEL &= (~BIT2);
+	P2DIR |= BIT2;
+	P2OUT &= ~BIT2;
+
+	P2OUT |= BIT0;			//125ms Turn on Time
+
+
+	__delay_cycles(1000000);
+
+	while (1){
+		PRxData = (unsigned char *)RxBuffer;    // Start of RX buffer
+		RXByteCtr = 2;                          // Load RX byte counter
+		while (UCB0CTL1 & UCTXSTP);             // Ensure stop condition got sent
+		UCB0CTL1 |= UCTXSTT;                    // I2C start condition
+		__bis_SR_register(CPUOFF + GIE);        // Enter LPM0 w/ interrupts
+												// Remain in LPM0 until all data
+												// is RX'd
+		__no_operation();                       // Set breakpoint >>here<< and
+												// read out the RxBuffer buffer
+		//OutputTemp = RxBuffer[0] << 8 | RxBuffer[1];
+		//for(x = 0; x < sizeof(OutputTemp) - 2; x++){
+		//	Output[x] = OutputTemp[x];
+		//}
+		//Pressure = (((Output - OutputMin) * (PMax - PMin)) / (OutputMax - OutputMin)) + PMin;
+		__delay_cycles(1000000);
+	}
 }
 
 //-------------------------------------------------------------------------------
@@ -115,16 +143,15 @@ __interrupt void USCIAB0TX_ISR(void)
 void __attribute__ ((interrupt(USCIAB0TX_VECTOR))) USCIAB0TX_ISR (void)
 #else
 #error Compiler not supported!
-#endif {
+#endif
+{
   RXByteCtr--;                              // Decrement RX byte counter
-  if (RXByteCtr)
-  {
+  if (RXByteCtr){
     *PRxData++ = UCB0RXBUF;                 // Move RX data to address PRxData
     if (RXByteCtr == 1)                     // Only one byte left?
       UCB0CTL1 |= UCTXSTP;                  // Generate I2C stop condition
   }
-  else
-  {
+  else{
     *PRxData = UCB0RXBUF;                   // Move final RX data to PRxData
     __bic_SR_register_on_exit(CPUOFF);      // Exit LPM0
   }
