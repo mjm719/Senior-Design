@@ -70,8 +70,8 @@
 //******************************************************************************
 #include <msp430.h>
 
-char string1[4] = {'A', 'b', 'C', 'd'};
-char string2[4];
+char string1[3] = {'A', 'b', 'C'};
+char string2[3];
 char i;
 char j = 0;
 
@@ -91,7 +91,6 @@ int main(void)
   BCSCTL1 = CALBC1_1MHZ;                    	//Set DCO
   DCOCTL = CALDCO_1MHZ;
 
-
   UCA0CTL1 |= UCSSEL_2;                     	//SMCLK
   UCA0BR0 = 104;                            	//1MHz 9600
   UCA0BR1 = 0;                              	//1MHz 9600
@@ -100,7 +99,9 @@ int main(void)
   while(1){
 	  i = 0;
 	  j = 0;
+	  string1[2]++;
 	  IE2 |= UCA0TXIE;                        // Enable USCI_A0 TX interrupt
+	  //IE2 |= UCA0RXIE;
 	  __bis_SR_register(LPM0_bits + GIE);       // Enter LPM0, interrupts enabled
 	  __delay_cycles(1000000);
   }
@@ -122,7 +123,9 @@ void __attribute__ ((interrupt(USCIAB0TX_VECTOR))) USCI0TX_ISR (void)
     IE2 &= ~UCA0TXIE;                       // Disable USCI_A0 TX interrupt
     //__bic_SR_register_on_exit(CPUOFF);      //Exit LPM0
     //WDTCTL = WDTPW + WDTTMSEL;                // Start WDT in interrupt mode
+    //WDTCTL = WDTPW;                // Start WDT in interrupt mode
     //IE1 |= WDTIE;                       // Enable WDT interrupt
+	TACTL = TASSEL_2 + ID_3 + MC_2 + TAIE;           // SMCLK, contmode, interrupt
     IE2 |= UCA0RXIE;                        // Enable USCI_A0 RX interrupt
   }
 }
@@ -137,6 +140,8 @@ void __attribute__ ((interrupt(USCIAB0RX_VECTOR))) USCI0RX_ISR (void)
 #error Compiler not supported!
 #endif
 {
+  TACTL = TACLR + MC_0;           			// SMCLK, contmode, interrupt
+  WDTCTL = WDTPW + WDTHOLD;                 // Stop WDT
   string2[j++] = UCA0RXBUF;
   if (j > sizeof string2 - 1)
   {
@@ -145,10 +150,24 @@ void __attribute__ ((interrupt(USCIAB0RX_VECTOR))) USCI0RX_ISR (void)
   }
 }
 
-// Watchdog Interval Timer interrupt service
-#pragma vector=WDT_VECTOR
-__interrupt void watchdog_timer(void) {
-	IE2 &= ~UCA0RXIE;                       // Disable USCI_A0 TX interrupt
-	IE1 &= ~WDTIE;                       // Enable WDT interrupt
-	__bic_SR_register_on_exit(CPUOFF);      //Exit LPM0
+// Timer_A3 Interrupt Vector (TA0IV) handler
+#if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
+#pragma vector=TIMER0_A1_VECTOR
+__interrupt void Timer_A(void)
+#elif defined(__GNUC__)
+void __attribute__ ((interrupt(TIMER0_A1_VECTOR))) Timer_A (void)
+#else
+#error Compiler not supported!
+#endif
+{
+ switch( TA0IV )
+ {
+   case  2: break;                          // CCR1 not used
+   case  4: break;                          // CCR2 not used
+   case 10: TACTL = TACLR + MC_0;           // SMCLK, contmode, interrupt
+	   	    __bic_SR_register_on_exit(CPUOFF);                  // overflow
+   	   	    // Exit LPM0
+            break;
+ }
 }
+
