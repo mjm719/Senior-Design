@@ -70,6 +70,12 @@
 #include "button_service.h"
 #include "data_service.h"
 
+/*UART header file */
+#include "uartecho.h"
+#include <ti/drivers/UART.h>
+/*#include <stdint.h>
+#include <stdio.h>
+#include <string.h>*/
 
 /*********************************************************************
  * CONSTANTS
@@ -555,7 +561,9 @@ static void ProjectZero_taskFxn(UArg a0, UArg a1)
 {
   // Initialize application
   ProjectZero_init();
-
+  //UART_Read();
+  //static uint8_t received_string[DS_STRING_LEN] = {0};
+  //UART_Start(received_string);
   // Application main loop
   for (;;)
   {
@@ -564,7 +572,7 @@ static void ProjectZero_taskFxn(UArg a0, UArg a1)
     // message is queued to the message receive queue of the thread or when
     // ICall_signal() function is called onto the semaphore.
     ICall_Errno errno = ICall_wait(ICALL_TIMEOUT_FOREVER);
-
+    //UART_Read();
     if (errno == ICALL_ERRNO_SUCCESS)
     {
       ICall_EntityID dest;
@@ -949,7 +957,6 @@ void user_DataService_ValueChangeHandler(char_data_t *pCharData)
   // Value to hold the received string for printing via Log, as Log printouts
   // happen in the Idle task, and so need to refer to a global/static variable.
   static uint8_t received_string[DS_STRING_LEN] = {0};
-
   switch (pCharData->paramID)
   {
     case DS_STRING_ID:
@@ -958,6 +965,9 @@ void user_DataService_ValueChangeHandler(char_data_t *pCharData)
       // Copy received data to holder array, ensuring NULL termination.
       memset(received_string, 0, DS_STRING_LEN);
       memcpy(received_string, pCharData->data, DS_STRING_LEN-1);
+      memcpy(write_string, pCharData->data, DS_STRING_LEN-1);
+      UART_MCU(write_string);
+      //UART_Read();
       // Needed to copy before log statement, as the holder array remains after
       // the pCharData message has been freed and reused for something else.
       Log_info3("Value Change msg: %s %s: %s",

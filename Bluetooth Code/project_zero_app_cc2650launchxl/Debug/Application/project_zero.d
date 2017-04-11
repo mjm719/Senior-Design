@@ -218,6 +218,9 @@ Application/project_zero.obj: ../Application/project_zero.h
 Application/project_zero.obj: C:/Users/ap58677/workspace_v7/project_zero_app_cc2650launchxl/Profiles/led_service.h
 Application/project_zero.obj: C:/Users/ap58677/workspace_v7/project_zero_app_cc2650launchxl/Profiles/button_service.h
 Application/project_zero.obj: C:/Users/ap58677/workspace_v7/project_zero_app_cc2650launchxl/Profiles/data_service.h
+Application/project_zero.obj: C:/Users/ap58677/workspace_v7/project_zero_app_cc2650launchxl/Startup/uartecho.h
+Application/project_zero.obj: C:/ti/tirtos_cc13xx_cc26xx_2_20_01_08/products/tidrivers_cc13xx_cc26xx_2_20_01_10/packages/ti/drivers/UART.h
+Application/project_zero.obj: C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.0.LTS/include/stddef.h
 
 ../Application/project_zero.c: 
 C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.0.LTS/include/string.h: 
@@ -437,3 +440,6 @@ C:/Users/ap58677/workspace_v7/project_zero_app_cc2650launchxl/Board/bsp_i2c.h:
 C:/Users/ap58677/workspace_v7/project_zero_app_cc2650launchxl/Profiles/led_service.h: 
 C:/Users/ap58677/workspace_v7/project_zero_app_cc2650launchxl/Profiles/button_service.h: 
 C:/Users/ap58677/workspace_v7/project_zero_app_cc2650launchxl/Profiles/data_service.h: 
+C:/Users/ap58677/workspace_v7/project_zero_app_cc2650launchxl/Startup/uartecho.h: 
+C:/ti/tirtos_cc13xx_cc26xx_2_20_01_08/products/tidrivers_cc13xx_cc26xx_2_20_01_10/packages/ti/drivers/UART.h: 
+C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.0.LTS/include/stddef.h: 

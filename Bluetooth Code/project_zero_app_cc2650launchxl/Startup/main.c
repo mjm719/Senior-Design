@@ -52,7 +52,7 @@
 
 #include <ti/drivers/Power.h>
 #include <ti/drivers/power/PowerCC26XX.h>
-#include <ti/sysbios/BIOS.h>
+//#include <ti/sysbios/BIOS.h>
 
 #include "icall.h"
 #include "hal_assert.h"
@@ -61,7 +61,7 @@
 #include "project_zero.h"
 
 #include <ti/drivers/UART.h>
-#include <uart_logs.h>
+//#include <uart_logs.h>
 
 /* Header files required to enable instruction fetch cache */
 #include <inc/hw_memmap.h>
@@ -86,20 +86,35 @@ bleUserCfg_t user0Cfg = BLE_USER_CFG;
 #include <ti/sysbios/BIOS.h>
 #include <ti/sysbios/knl/Semaphore.h>
 #include <ti/sysbios/knl/Clock.h>
-#include <ti/sysbios/knl/Task.h>
-// #include <ti/drivers/Watchdog.h>
+//#include <ti/sysbios/knl/Task.h>
+ #include <ti/drivers/Watchdog.h>
 
-/* TI-RTOS Header files */
-#include <ti/drivers/I2C.h>
-#include <ti/drivers/i2c/I2CCC26XX.h>
+/*TI-RTOS Header files*/
+//#include <ti/drivers/I2C.h>
+//#include <ti/drivers/i2c/I2CCC26XX.h>
 #include <ti/drivers/PIN.h>
-#include <driverlib/prcm.h>
+//#include <driverlib/prcm.h>
 
 
 /* Board Header files */
-#include "Board.h"
+//#include "Board.h"
+
+/*UART header file */
+//#include "uartecho.h"
 
 
+/* Global memory storage for a PIN_Config table */
+//static PIN_State ledPinState;
+
+/*
+ * Application LED pin configuration table:
+ *   - All LEDs board LEDs are off.
+ */
+/*PIN_Config ledPinTable[] = {
+    Board_LED1 | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
+    Board_LED2 | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
+    PIN_TERMINATE
+};*/
 /*******************************************************************************
  * MACROS
  */
@@ -124,9 +139,9 @@ bleUserCfg_t user0Cfg = BLE_USER_CFG;
  * EXTERNS
  */
 
-extern void AssertHandler(uint8 assertCause, uint8 assertSubcause);
+//extern void AssertHandler(uint8 assertCause, uint8 assertSubcause);
 
-extern Display_Handle dispHandle;
+//extern Display_Handle dispHandle;
 
 /*******************************************************************************
  * @fn          Main
@@ -145,8 +160,9 @@ extern Display_Handle dispHandle;
  */
 int main()
 {
+    //PIN_Handle ledPinHandle;
   /* Register Application callback to trap asserts raised in the Stack */
-  RegisterAssertCback(AssertHandler);
+  //RegisterAssertCback(AssertHandler);
 
   PIN_init(BoardGpioInitTable);
 
@@ -159,10 +175,21 @@ int main()
   /* Initialize the RTOS Log formatting and output to UART in Idle thread.
    * Note: Define xdc_runtime_Log_DISABLE_ALL to remove all impact of Log.
    * Note: NULL as Params gives 115200,8,N,1 and Blocking mode */
-  UART_init();
-  bspI2cInit();
-  UartLog_init(UART_open(Board_UART, NULL));
+  //UART_init();
+ // UART_Start();
 
+  //bspI2cInit();
+  //UartLog_init(UART_open(Board_UART, NULL));
+  /* Starting UART functionality */
+
+
+      /* Open LED pins
+          ledPinHandle = PIN_open(&ledPinState, ledPinTable);
+          if(!ledPinHandle) {
+              System_abort("Error initializing board LED pins\n");
+          }
+
+          PIN_setOutputValue(ledPinHandle, Board_LED1, 1);*/
   /* Initialize ICall module */
   ICall_init();
 
@@ -173,6 +200,7 @@ int main()
   GAPRole_createTask();
 
   ProjectZero_createTask();
+
 
   /* enable interrupts and start SYS/BIOS */
   BIOS_start();
@@ -198,7 +226,7 @@ int main()
  *
  * @return      None.
  */
-void AssertHandler(uint8 assertCause, uint8 assertSubcause)
+/*void AssertHandler(uint8 assertCause, uint8 assertSubcause)
 {
   // Open the display if the app has not already done so
   if ( !dispHandle )
@@ -244,7 +272,7 @@ void AssertHandler(uint8 assertCause, uint8 assertSubcause)
 
   return;
 }
-
+*/
 
 /*******************************************************************************
  * @fn          smallErrorHook
@@ -261,11 +289,11 @@ void AssertHandler(uint8 assertCause, uint8 assertSubcause)
  *
  * @return      None.
  */
-void smallErrorHook(Error_Block *eb)
+/*void smallErrorHook(Error_Block *eb)
 {
   for (;;);
 }
-
+*/
 
 /*******************************************************************************
  */

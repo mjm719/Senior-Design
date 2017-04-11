@@ -10,6 +10,7 @@ GEN_OPTS__FLAG := --cmd_file="configPkg/compiler.opt"
 GEN_CMDS__FLAG := -l"configPkg/linker.cmd"
 
 ORDERED_OBJS += \
+"./uartecho.obj" \
 "./Application/project_zero.obj" \
 "./Application/util.obj" \
 "./Board/CC2650_LAUNCHXL.obj" \
@@ -45,6 +46,7 @@ RMDIR := RMDIR /S/Q
 
 # All of the sources participating in the build are defined here
 -include sources.mk
+-include subdir_vars.mk
 -include Application/subdir_vars.mk
 -include Board/subdir_vars.mk
 -include Drivers/ECC/subdir_vars.mk
@@ -55,6 +57,7 @@ RMDIR := RMDIR /S/Q
 -include Startup/subdir_vars.mk
 -include TOOLS/subdir_vars.mk
 -include Utils/subdir_vars.mk
+-include subdir_rules.mk
 -include Application/subdir_rules.mk
 -include Board/subdir_rules.mk
 -include Drivers/ECC/subdir_rules.mk
@@ -200,8 +203,8 @@ project_zero_app_cc2650launchxl.hex: $(EXE_OUTPUTS)
 clean:
 	-$(RM) $(GEN_CMDS__QUOTED)$(GEN_MISC_FILES__QUOTED)$(BIN_OUTPUTS__QUOTED)$(GEN_FILES__QUOTED)$(EXE_OUTPUTS__QUOTED)$(GEN_OPTS__QUOTED)
 	-$(RMDIR) $(GEN_MISC_DIRS__QUOTED)
-	-$(RM) "Application\project_zero.obj" "Application\util.obj" "Board\CC2650_LAUNCHXL.obj" "Board\bsp_i2c.obj" "Board\sensor.obj" "Drivers\ECC\ECCROMCC26XX.obj" "Drivers\TRNG\TRNGCC26XX.obj" "ICall\icall.obj" "ICall\icall_cc2650.obj" "ICallBLE\ble_user_config.obj" "ICallBLE\icall_api.obj" "PROFILES\button_service.obj" "PROFILES\data_service.obj" "PROFILES\devinfoservice.obj" "PROFILES\gatt_uuid.obj" "PROFILES\gattservapp_util.obj" "PROFILES\led_service.obj" "PROFILES\peripheral.obj" "Startup\ccfg_app_ble.obj" "Startup\main.obj" "Utils\uart_logs.obj" 
-	-$(RM) "Application\project_zero.d" "Application\util.d" "Board\CC2650_LAUNCHXL.d" "Board\bsp_i2c.d" "Board\sensor.d" "Drivers\ECC\ECCROMCC26XX.d" "Drivers\TRNG\TRNGCC26XX.d" "ICall\icall.d" "ICall\icall_cc2650.d" "ICallBLE\ble_user_config.d" "ICallBLE\icall_api.d" "PROFILES\button_service.d" "PROFILES\data_service.d" "PROFILES\devinfoservice.d" "PROFILES\gatt_uuid.d" "PROFILES\gattservapp_util.d" "PROFILES\led_service.d" "PROFILES\peripheral.d" "Startup\ccfg_app_ble.d" "Startup\main.d" "Utils\uart_logs.d" 
+	-$(RM) "uartecho.obj" "Application\project_zero.obj" "Application\util.obj" "Board\CC2650_LAUNCHXL.obj" "Board\bsp_i2c.obj" "Board\sensor.obj" "Drivers\ECC\ECCROMCC26XX.obj" "Drivers\TRNG\TRNGCC26XX.obj" "ICall\icall.obj" "ICall\icall_cc2650.obj" "ICallBLE\ble_user_config.obj" "ICallBLE\icall_api.obj" "PROFILES\button_service.obj" "PROFILES\data_service.obj" "PROFILES\devinfoservice.obj" "PROFILES\gatt_uuid.obj" "PROFILES\gattservapp_util.obj" "PROFILES\led_service.obj" "PROFILES\peripheral.obj" "Startup\ccfg_app_ble.obj" "Startup\main.obj" "Utils\uart_logs.obj" 
+	-$(RM) "uartecho.d" "Application\project_zero.d" "Application\util.d" "Board\CC2650_LAUNCHXL.d" "Board\bsp_i2c.d" "Board\sensor.d" "Drivers\ECC\ECCROMCC26XX.d" "Drivers\TRNG\TRNGCC26XX.d" "ICall\icall.d" "ICall\icall_cc2650.d" "ICallBLE\ble_user_config.d" "ICallBLE\icall_api.d" "PROFILES\button_service.d" "PROFILES\data_service.d" "PROFILES\devinfoservice.d" "PROFILES\gatt_uuid.d" "PROFILES\gattservapp_util.d" "PROFILES\led_service.d" "PROFILES\peripheral.d" "Startup\ccfg_app_ble.d" "Startup\main.d" "Utils\uart_logs.d" 
 	-@echo 'Finished clean'
 	-@echo ' '
 

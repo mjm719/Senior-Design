@@ -103,8 +103,8 @@ typedef struct
   DataServiceChange_t        pfnCfgChangeCb;  // Called when characteristic CCCD changes
 } DataServiceCBs_t;
 
-
-
+//extern static DataServiceCBs_t *pAppCBs;
+//extern uint8_t *app_string;
 /*********************************************************************
  * API FUNCTIONS
  */
