@@ -965,8 +965,8 @@ void user_DataService_ValueChangeHandler(char_data_t *pCharData)
       // Copy received data to holder array, ensuring NULL termination.
       memset(received_string, 0, DS_STRING_LEN);
       memcpy(received_string, pCharData->data, DS_STRING_LEN-1);
-      memcpy(write_string, pCharData->data, DS_STRING_LEN-1);
-      UART_MCU(write_string);
+      //memcpy(write_string, pCharData->data, DS_STRING_LEN-1);
+      UART_MCU(received_string);
       //UART_Read();
       // Needed to copy before log statement, as the holder array remains after
       // the pCharData message has been freed and reused for something else.

@@ -10,7 +10,7 @@
 
 extern void UART_Write(uint8_t *received_string);
 extern void UART_MCU(uint8_t *received_string);
-extern uint8_t * volatile write_string;
+//extern uint8_t * volatile write_string;
 //extern void UART_MCU(uint8_t *received_string);
 //extern void UART_Read(void);
 

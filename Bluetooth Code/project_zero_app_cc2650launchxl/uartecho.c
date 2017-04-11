@@ -115,7 +115,7 @@ Char task0Stack[TASKSTACKSIZE];
 
     //}
 }*/
-extern void UART_MCU(uint8_t *write_string)
+extern void UART_MCU(uint8_t *received_string)
 {
     char input[3] = {0};
         //char output[3] = {0};
@@ -135,10 +135,10 @@ extern void UART_MCU(uint8_t *write_string)
        uartParams.readEcho = UART_ECHO_OFF;
        uartParams.baudRate = 9600;
        uart = UART_open(Board_UART0, &uartParams);
-    //uint8_t *write_string;
+    uint8_t *write_string;
     while(1)
     {
-       //write_string = received_string;
+       write_string = received_string;
        if (uart == NULL)
        {
            ;//System_abort("Error opening the UART");
