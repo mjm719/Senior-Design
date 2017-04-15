@@ -60,6 +60,8 @@ namespace Main
 
         public static bool startRead = false;
         public static bool startWrite = false;
+
+        public static bool isConnected = false;
     }
 
     public class SampleGattAttributes
@@ -110,6 +112,11 @@ namespace Main
         public int CurrentValue;
         public bool NewPreset;
 
+        LinearLayout loadingScreenLayout1;
+        LinearLayout loadingScreenLayout2;
+        TextView loadingTextView;
+        ImageView loadingWheel;
+
         TextView currentPressureView;
         TextView targetPressureView;
         TextView statusView;
@@ -117,11 +124,11 @@ namespace Main
         Space vMargin2;
         ImageButton addButton;
 
-        LinearLayout editPressureTextLayout1;
-        LinearLayout editPressureTextLayout2;
-        LinearLayout editPressureTextLayout3;
-        LinearLayout editPressureTextLayout4;
-        LinearLayout editPressureTextLayout5;
+        LinearLayout editPressureLayout1;
+        LinearLayout editPressureLayout2;
+        LinearLayout editPressureLayout3;
+        LinearLayout editPressureLayout4;
+        LinearLayout editPressureLayout5;
         ImageButton backButton;
         EditText editPressureName;
         EditText editPressureValue;
@@ -138,6 +145,8 @@ namespace Main
         public static BluetoothManager mBluetoothManager;
         public BluetoothDeviceReceiver mReceiver;
 
+        System.Threading.Timer loadingScreenDots;
+        System.Threading.Timer loadingScreenWheel;
         System.Threading.Timer refresh;
         System.Threading.Timer read;
         System.Threading.Timer write;
@@ -241,16 +250,34 @@ namespace Main
             Global.currentPressure = Constants.PRESSURESTART;
             Global.targetPressure = Global.currentPressure;
 
-            // Start refresh timer immediately, invoke callback every 10 ms.
-            // http://stackoverflow.com/questions/13019433/calling-method-on-every-x-minutes
-            refresh = new System.Threading.Timer(x => RefreshView(), null, 0, 10);
+            #region Loading Views
 
-            // Start update timer immediately, invoke Write callback every PERIOD ms.
-            write = new System.Threading.Timer(x => Write(), null, 0, Constants.PERIOD);
+            loadingScreenLayout1 = new LinearLayout(this);
+            Global.layout.AddView(loadingScreenLayout1);
+            loadingScreenLayout1.Orientation = Orientation.Horizontal;
+            loadingScreenLayout1.SetGravity(Android.Views.GravityFlags.Center);
+            loadingScreenLayout1.SetPadding((int)(Resources.DisplayMetrics.WidthPixels * 0.04), (int)(Resources.DisplayMetrics.HeightPixels * 0.04), 0, 0);
 
-            // Start update timer immediately, invoke Read callback every PERIOD ms; start after (PERIOD / 2) ms.
+            loadingTextView = new TextView(this);
+            loadingScreenLayout1.AddView(loadingTextView);
+            loadingTextView.Gravity = Android.Views.GravityFlags.Center;
+            loadingTextView.Text = "Loading...";
+            loadingTextView.TextSize = (int)(Resources.DisplayMetrics.WidthPixels * 0.0175);
+            loadingTextView.SetTextColor(Android.Graphics.Color.White);
 
-            read = new System.Threading.Timer(x => Read(), null, Constants.PERIOD / 2, Constants.PERIOD);
+            loadingScreenLayout2 = new LinearLayout(this);
+            Global.layout.AddView(loadingScreenLayout2);
+            loadingScreenLayout2.Orientation = Orientation.Horizontal;
+            loadingScreenLayout2.SetGravity(Android.Views.GravityFlags.Center);
+            loadingScreenLayout2.SetPadding((int)(Resources.DisplayMetrics.WidthPixels * 0.04), (int)(Resources.DisplayMetrics.HeightPixels * 0.04), 0, 0);
+
+            loadingWheel = new ImageView(this);
+            loadingScreenLayout2.AddView(loadingWheel);
+            loadingWheel.SetBackgroundResource(Resources.GetIdentifier("icon_bike_tire_white", "drawable", PackageName));
+            loadingWheel.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.2);
+            loadingWheel.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.2);
+
+            #endregion
 
             #region Main Views
 
@@ -327,14 +354,14 @@ namespace Main
 
             #region Back Button
 
-            editPressureTextLayout1 = new LinearLayout(this);
-            Global.layout.AddView(editPressureTextLayout1);
-            editPressureTextLayout1.Orientation = Orientation.Horizontal;
-            editPressureTextLayout1.SetGravity(Android.Views.GravityFlags.Left);
-            editPressureTextLayout1.SetPadding((int)(Resources.DisplayMetrics.WidthPixels * 0.04), (int)(Resources.DisplayMetrics.HeightPixels * 0.04), 0, 0);
+            editPressureLayout1 = new LinearLayout(this);
+            Global.layout.AddView(editPressureLayout1);
+            editPressureLayout1.Orientation = Orientation.Horizontal;
+            editPressureLayout1.SetGravity(Android.Views.GravityFlags.Left);
+            editPressureLayout1.SetPadding((int)(Resources.DisplayMetrics.WidthPixels * 0.04), (int)(Resources.DisplayMetrics.HeightPixels * 0.04), 0, 0);
 
             backButton = new ImageButton(this);
-            editPressureTextLayout1.AddView(backButton);
+            editPressureLayout1.AddView(backButton);
             backButton.SetBackgroundResource(Resources.GetIdentifier("icon_back", "drawable", PackageName));
             backButton.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.04);
             backButton.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.04);
@@ -344,14 +371,14 @@ namespace Main
 
             #region Preset Name
 
-            editPressureTextLayout2 = new LinearLayout(this);
-            Global.layout.AddView(editPressureTextLayout2);
-            editPressureTextLayout2.Orientation = Orientation.Horizontal;
-            editPressureTextLayout2.SetGravity(Android.Views.GravityFlags.Center);
-            editPressureTextLayout2.SetPadding(0, 0, 0, 0);
+            editPressureLayout2 = new LinearLayout(this);
+            Global.layout.AddView(editPressureLayout2);
+            editPressureLayout2.Orientation = Orientation.Horizontal;
+            editPressureLayout2.SetGravity(Android.Views.GravityFlags.Center);
+            editPressureLayout2.SetPadding(0, 0, 0, 0);
 
             editPressureName = new EditText(this);
-            editPressureTextLayout2.AddView(editPressureName);
+            editPressureLayout2.AddView(editPressureName);
             editPressureName.Text = "???";
             editPressureName.TextSize = (int)(Resources.DisplayMetrics.WidthPixels * 0.0175);
             editPressureName.SetTextColor(Android.Graphics.Color.White);
@@ -361,21 +388,21 @@ namespace Main
 
             #region Pressure Value
 
-            editPressureTextLayout3 = new LinearLayout(this);
-            Global.layout.AddView(editPressureTextLayout3);
-            editPressureTextLayout3.Orientation = Orientation.Horizontal;
-            editPressureTextLayout3.SetGravity(Android.Views.GravityFlags.Center);
-            editPressureTextLayout3.SetPadding(0, 0, 0, 0);
+            editPressureLayout3 = new LinearLayout(this);
+            Global.layout.AddView(editPressureLayout3);
+            editPressureLayout3.Orientation = Orientation.Horizontal;
+            editPressureLayout3.SetGravity(Android.Views.GravityFlags.Center);
+            editPressureLayout3.SetPadding(0, 0, 0, 0);
 
             editPressureValue = new EditText(this);
-            editPressureTextLayout3.AddView(editPressureValue);
+            editPressureLayout3.AddView(editPressureValue);
             editPressureValue.Text = "???";
             editPressureValue.TextSize = (int)(Resources.DisplayMetrics.WidthPixels * 0.0175);
             editPressureValue.SetTextColor(Android.Graphics.Color.White);
             editPressureValue.TextChanged += EditSeekBar;
 
             units = new TextView(this);
-            editPressureTextLayout3.AddView(units);
+            editPressureLayout3.AddView(units);
             units.Text = " psi";
             units.TextSize = (int)(Resources.DisplayMetrics.WidthPixels * 0.0175);
             units.SetTextColor(Android.Graphics.Color.White);
@@ -384,14 +411,14 @@ namespace Main
 
             #region Seek Bar
 
-            editPressureTextLayout4 = new LinearLayout(this);
-            Global.layout.AddView(editPressureTextLayout4);
-            editPressureTextLayout4.Orientation = Orientation.Horizontal;
-            editPressureTextLayout4.SetGravity(Android.Views.GravityFlags.Center);
-            editPressureTextLayout4.SetPadding(0, 0, 0, 0);
+            editPressureLayout4 = new LinearLayout(this);
+            Global.layout.AddView(editPressureLayout4);
+            editPressureLayout4.Orientation = Orientation.Horizontal;
+            editPressureLayout4.SetGravity(Android.Views.GravityFlags.Center);
+            editPressureLayout4.SetPadding(0, 0, 0, 0);
 
             seekBar = new SeekBar(this);
-            editPressureTextLayout4.AddView(seekBar);
+            editPressureLayout4.AddView(seekBar);
             seekBar.LayoutParameters.Width = (int)(Resources.DisplayMetrics.WidthPixels * 0.8);
             seekBar.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.05);
             seekBar.ProgressChanged += EditPSI;
@@ -400,14 +427,14 @@ namespace Main
 
             #region Set Button
 
-            editPressureTextLayout5 = new LinearLayout(this);
-            Global.layout.AddView(editPressureTextLayout5);
-            editPressureTextLayout5.Orientation = Orientation.Horizontal;
-            editPressureTextLayout5.SetGravity(Android.Views.GravityFlags.Center);
-            editPressureTextLayout5.SetPadding(0, 20, 0, 0);
+            editPressureLayout5 = new LinearLayout(this);
+            Global.layout.AddView(editPressureLayout5);
+            editPressureLayout5.Orientation = Orientation.Horizontal;
+            editPressureLayout5.SetGravity(Android.Views.GravityFlags.Center);
+            editPressureLayout5.SetPadding(0, 20, 0, 0);
 
             setButton = new Button(this);
-            editPressureTextLayout5.AddView(setButton);
+            editPressureLayout5.AddView(setButton);
             setButton.Text = "Set";
             setButton.TextSize = (int)(Resources.DisplayMetrics.WidthPixels * 0.0125);
             setButton.Gravity = Android.Views.GravityFlags.Center;
@@ -422,7 +449,22 @@ namespace Main
 
             #endregion
 
-            LoadMainViews();
+            LoadLoadingViews();
+
+            #region Initialize Timers
+
+            // http://stackoverflow.com/questions/13019433/calling-method-on-every-x-minutes
+
+            // Loading Screen Timers.
+            loadingScreenDots = new System.Threading.Timer(x => LoadingScreenDots(), null, 0, 250);
+            loadingScreenWheel = new System.Threading.Timer(x => LoadingScreenWheel(), null, 0, 10);
+
+            // Main Screen Timers.
+            refresh = new System.Threading.Timer(x => RefreshView(), null, 0, 10);
+            write = new System.Threading.Timer(x => Write(), null, 0, Constants.PERIOD);
+            read = new System.Threading.Timer(x => Read(), null, Constants.PERIOD / 2, Constants.PERIOD);
+
+            #endregion
         }
 
         public void TryGetLocation()
@@ -462,6 +504,41 @@ namespace Main
 
             // Requesting permissions...
             RequestPermissions(PermissionsLocation, RequestLocationId);
+        }
+
+        private void LoadingScreenDots()
+        {
+            if (loadingTextView == null)
+            {
+                return;
+            }
+
+            if (loadingTextView.Text == "Loading...")
+            {
+                this.RunOnUiThread((() => loadingTextView.Text = "Loading   "));
+            }
+            else if (loadingTextView.Text == "Loading   ")
+            {
+                this.RunOnUiThread((() => loadingTextView.Text = "Loading.  "));
+            }
+            else if (loadingTextView.Text == "Loading.  ")
+            {
+                this.RunOnUiThread((() => loadingTextView.Text = "Loading.. "));
+            }
+            else if (loadingTextView.Text == "Loading.. ")
+            {
+                this.RunOnUiThread((() => loadingTextView.Text = "Loading..."));
+            }
+        }
+
+        private void LoadingScreenWheel()
+        {
+            if (loadingWheel == null)
+            {
+                return;
+            }
+
+            loadingWheel.Rotation += (float)1.5;
         }
 
         private void RefreshView()
@@ -540,7 +617,13 @@ namespace Main
         {
             if (Global.startWrite)
             {
-                mReceiver.Write(ConvertDataOut(Global.targetPressure, Global.forceIdle));
+                // mReceiver.Write(ConvertDataOut(Global.targetPressure, Global.forceIdle));
+
+                // On first Write, load Main Views.
+                if (Global.startWrite && !Global.startRead)
+                {
+                    LoadMainViews();
+                }
 
                 // Stop writing, start reading.
                 Global.startWrite = false;
@@ -814,29 +897,94 @@ namespace Main
             Global.DeleteButtons.Add(deleteButton);
         }
 
-        private void LoadLoadingScreen()
+        private void LoadLoadingViews()
         {
-            // Show loading screen.
-        }
+            #region Remove Main Views
 
-        private void LoadMainViews()
-        {
+            try
+            {
+                Global.layout.RemoveView(vMargin1);
+                Global.layout.RemoveView(currentPressureView);
+                Global.layout.RemoveView(targetPressureView);
+                Global.layout.RemoveView(statusView);
+                Global.layout.RemoveView(vMargin2);
+
+                foreach (LinearLayout preset in Global.Presets)
+                {
+                    Global.layout.RemoveView(preset);
+                }
+
+                Global.layout.RemoveView(addButton);
+            }
+            catch { };
+
+            #endregion
+
             #region Remove Edit Views
 
             try
             {
-                editPressureTextLayout1.RemoveView(backButton);
-                editPressureTextLayout2.RemoveView(editPressureName);
-                editPressureTextLayout3.RemoveView(editPressureValue);
-                editPressureTextLayout3.RemoveView(units);
-                editPressureTextLayout4.RemoveView(seekBar);
-                editPressureTextLayout5.RemoveView(setButton);
+                editPressureLayout1.RemoveView(backButton);
+                editPressureLayout2.RemoveView(editPressureName);
+                editPressureLayout3.RemoveView(editPressureValue);
+                editPressureLayout3.RemoveView(units);
+                editPressureLayout4.RemoveView(seekBar);
+                editPressureLayout5.RemoveView(setButton);
 
-                Global.layout.RemoveView(editPressureTextLayout1);
-                Global.layout.RemoveView(editPressureTextLayout2);
-                Global.layout.RemoveView(editPressureTextLayout3);
-                Global.layout.RemoveView(editPressureTextLayout4);
-                Global.layout.RemoveView(editPressureTextLayout5);
+                Global.layout.RemoveView(editPressureLayout1);
+                Global.layout.RemoveView(editPressureLayout2);
+                Global.layout.RemoveView(editPressureLayout3);
+                Global.layout.RemoveView(editPressureLayout4);
+                Global.layout.RemoveView(editPressureLayout5);
+            }
+            catch { };
+
+            #endregion
+        }
+
+        private void LoadMainViews()
+        {
+            #region Stop Loading Screen Timers
+
+            try
+            {
+                loadingScreenDots.Change(1000, Timeout.Infinite);
+                loadingScreenWheel.Change(1000, Timeout.Infinite);
+            }
+            catch { };
+
+            #endregion
+
+            #region Remove Loading Screen Views
+
+            try
+            {
+                loadingScreenLayout1.RemoveView(loadingTextView);
+                loadingScreenLayout2.RemoveView(loadingWheel);
+
+                Global.layout.RemoveView(loadingScreenLayout1);
+                Global.layout.RemoveView(loadingScreenLayout2);
+            }
+            catch { };
+
+            #endregion
+
+            #region Remove Edit Views
+
+            try
+            {
+                editPressureLayout1.RemoveView(backButton);
+                editPressureLayout2.RemoveView(editPressureName);
+                editPressureLayout3.RemoveView(editPressureValue);
+                editPressureLayout3.RemoveView(units);
+                editPressureLayout4.RemoveView(seekBar);
+                editPressureLayout5.RemoveView(setButton);
+
+                Global.layout.RemoveView(editPressureLayout1);
+                Global.layout.RemoveView(editPressureLayout2);
+                Global.layout.RemoveView(editPressureLayout3);
+                Global.layout.RemoveView(editPressureLayout4);
+                Global.layout.RemoveView(editPressureLayout5);
             }
             catch { };
 
@@ -894,20 +1042,20 @@ namespace Main
 
             try
             {
-                Global.layout.AddView(editPressureTextLayout1);
-                Global.layout.AddView(editPressureTextLayout2);
-                Global.layout.AddView(editPressureTextLayout3);
-                Global.layout.AddView(editPressureTextLayout4);
-                Global.layout.AddView(editPressureTextLayout5);
+                Global.layout.AddView(editPressureLayout1);
+                Global.layout.AddView(editPressureLayout2);
+                Global.layout.AddView(editPressureLayout3);
+                Global.layout.AddView(editPressureLayout4);
+                Global.layout.AddView(editPressureLayout5);
 
-                editPressureTextLayout1.AddView(backButton);
-                editPressureTextLayout2.AddView(editPressureName);
+                editPressureLayout1.AddView(backButton);
+                editPressureLayout2.AddView(editPressureName);
                 editPressureName.Text = name;
-                editPressureTextLayout3.AddView(editPressureValue);
+                editPressureLayout3.AddView(editPressureValue);
                 editPressureValue.Text = value.ToString();
-                editPressureTextLayout3.AddView(units);
-                editPressureTextLayout4.AddView(seekBar);
-                editPressureTextLayout5.AddView(setButton);
+                editPressureLayout3.AddView(units);
+                editPressureLayout4.AddView(seekBar);
+                editPressureLayout5.AddView(setButton);
             }
             catch { };
 
@@ -1299,13 +1447,13 @@ namespace Main
             if (status == GattStatus.Success)
             {
                 // Service discovery successful.
-                ;
                 
                 // Gathering available GATT services...
                 mDeviceControlActivity.DisplayGattServices(gatt.Services);
 
                 // Read/Write commands may now be issued.
-                ;
+                // Load Main Views.
+                Global.isConnected = true;
 
                 // Write once, then continually Read.
                 Global.startWrite = true;
