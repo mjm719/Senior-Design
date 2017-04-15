@@ -23,9 +23,16 @@ namespace Main
 {
     public static class Constants
     {
-        public static int MINPRESSURE = 15;
-        public static int MAXPRESSURE = 70;
-        public static int MAXPRESETS = 5;
+        public const int PRESSURESTART = 35;
+        public const int PRESSUREMIN = 1;
+        public const int PRESSUREMAX = 150;
+        public const int PRESSURESETMIN = 1;
+        public const int PRESSURESETMAX = 70;
+        public const int OUTPUTMIN = 1648;
+        public const int OUTPUTMAX = 14745;
+        public const int MAXPRESETS = 5;
+        public const int PERIOD = 50;
+        public const int READWAIT = 20;
 
         public const int REQUEST_ENABLE_BT = 1;
 
@@ -50,6 +57,9 @@ namespace Main
         public static List<ImageButton> EditButtons;
         public static List<ImageButton> DeleteButtons;
         public static List<int> PresetVals;
+
+        public static bool startRead = false;
+        public static bool startWrite = false;
     }
 
     public class SampleGattAttributes
@@ -129,7 +139,8 @@ namespace Main
         public BluetoothDeviceReceiver mReceiver;
 
         System.Threading.Timer refresh;
-        System.Threading.Timer update;
+        System.Threading.Timer read;
+        System.Threading.Timer write;
 
         protected override void OnCreate(Bundle bundle)
         {
@@ -227,15 +238,19 @@ namespace Main
             Global.layout.SetGravity(Android.Views.GravityFlags.CenterHorizontal);
             SetContentView(Global.layout);
 
-            Global.currentPressure = 50;
+            Global.currentPressure = Constants.PRESSURESTART;
             Global.targetPressure = Global.currentPressure;
 
             // Start refresh timer immediately, invoke callback every 10 ms.
             // http://stackoverflow.com/questions/13019433/calling-method-on-every-x-minutes
             refresh = new System.Threading.Timer(x => RefreshView(), null, 0, 10);
 
-            // Start update timer immediately, invoke callback every 1 s (1000 ms).
-            update = new System.Threading.Timer(x => Update(), null, 0, 1000);
+            // Start update timer immediately, invoke Write callback every PERIOD ms.
+            write = new System.Threading.Timer(x => Write(), null, 0, Constants.PERIOD);
+
+            // Start update timer immediately, invoke Read callback every PERIOD ms; start after (PERIOD / 2) ms.
+
+            read = new System.Threading.Timer(x => Read(), null, Constants.PERIOD / 2, Constants.PERIOD);
 
             #region Main Views
 
@@ -301,8 +316,8 @@ namespace Main
 
             // Start out with 2 premade presets.
 
-            AddPreset("Preset 1", Constants.MINPRESSURE);
-            AddPreset("Preset 2", Constants.MAXPRESSURE);
+            AddPreset("Preset 1", Constants.PRESSURESETMIN);
+            AddPreset("Preset 2", Constants.PRESSURESETMAX);
 
             #endregion
 
@@ -465,7 +480,7 @@ namespace Main
 
             if (Global.status == 1)
             {
-                this.RunOnUiThread((() => statusView.Text = "Pressurizing..."));
+                this.RunOnUiThread((() => statusView.Text = "Pressure Stabilized."));
             }
 
             if (Global.status == 2)
@@ -475,9 +490,29 @@ namespace Main
 
             if (Global.status == 3)
             {
-                this.RunOnUiThread((() => statusView.Text = "Pressure stabilized."));
+                this.RunOnUiThread((() => statusView.Text = "Pressurizing..."));
             }
 
+            try
+            {
+                for (int i = 0; i <= Global.Presets.Count; i++)
+                {
+                    Java.Lang.Object tag = "Activate Button " + (i + 1).ToString();
+                    Button activateButton = (Button)Global.Presets[i].FindViewWithTag(tag);
+
+                    if (Global.status == 2 || Global.status == 3)
+                    {
+                        this.RunOnUiThread((() => activateButton.SetBackgroundColor(Android.Graphics.Color.Rgb(128, 128, 128)))); // Gray
+                    }
+                    else
+                    {
+                        this.RunOnUiThread((() => activateButton.SetBackgroundColor(Android.Graphics.Color.Rgb(0, 128, 0)))); // #008000
+                    }
+                }
+            }
+            catch { };
+
+            // Set Add Button Visibility.
             try
             {
                 if (Global.Presets.Count >= Constants.MAXPRESETS)
@@ -493,15 +528,34 @@ namespace Main
             catch { };
         }
 
-        private void Update()
+        private void Read()
         {
-            mReceiver.Write(ConvertDataOut(Global.targetPressure, Global.forceIdle));
+            if (Global.startRead)
+            {
+                ConvertDataIn(mReceiver.Read());
+            }
+        }
 
-            ConvertDataIn(mReceiver.Read());
+        private void Write()
+        {
+            if (Global.startWrite)
+            {
+                mReceiver.Write(ConvertDataOut(Global.targetPressure, Global.forceIdle));
+
+                // Stop writing, start reading.
+                Global.startWrite = false;
+                Global.startRead = true;
+            }
         }
 
         private void ActivateButtonClick(object sender, System.EventArgs e)
         {
+            if (Global.status == 2 || Global.status == 3)
+            {
+                // Disable button click if unstable.
+                return;
+            }
+
             Java.Lang.Object tag;
             Java.Lang.Object senderTag;
 
@@ -559,7 +613,7 @@ namespace Main
             NewPreset = true;
 
             string name = "Preset " + (PresetsCount + 1).ToString();
-            int value = Constants.MINPRESSURE;
+            int value = Constants.PRESSURESETMIN;
 
             LoadEditViews(name, value);
         }
@@ -578,6 +632,9 @@ namespace Main
             if (NewPreset)
             {
                 AddPreset(CurrentName, CurrentValue);
+
+                // Reload Main Views.
+                LoadMainViews();
             }
             // If this is an Edit operation, assign new name/value to cooresponding preset.
             else
@@ -637,7 +694,7 @@ namespace Main
             }
             catch
             {
-                CurrentValue = Constants.MINPRESSURE;
+                CurrentValue = Constants.PRESSURESETMIN;
             }
 
             // If changing pressure text, update seek bar position.
@@ -755,6 +812,11 @@ namespace Main
             ImageButton deleteButton = (ImageButton)Global.Presets[i - 1].FindViewWithTag(deleteTag);
             deleteButton.Click += DeleteButtonClick;
             Global.DeleteButtons.Add(deleteButton);
+        }
+
+        private void LoadLoadingScreen()
+        {
+            // Show loading screen.
         }
 
         private void LoadMainViews()
@@ -887,7 +949,7 @@ namespace Main
 
             activateButton.TextSize = (int)(Resources.DisplayMetrics.WidthPixels * 0.0125);
             activateButton.SetAllCaps(false);
-            activateButton.SetTextColor(Android.Graphics.Color.Rgb(224, 247, 250)); // #E0F7FA
+            activateButton.SetTextColor(Android.Graphics.Color.Rgb(255, 255, 255)); // White
             activateButton.SetBackgroundColor(Android.Graphics.Color.Rgb(0, 128, 0)); // #008000
 
             #endregion
@@ -910,7 +972,7 @@ namespace Main
             presetText.TextSize = (int)(Resources.DisplayMetrics.WidthPixels * 0.0125);
             presetText.SetAllCaps(false);
             presetText.SetTextColor(Android.Graphics.Color.White);
-            //presetText.SetTextColor(Android.Graphics.Color.Rgb(224, 247, 250)); // #E0F7FA
+            presetText.SetTextColor(Android.Graphics.Color.Rgb(255, 255, 255)); // #White
 
             #endregion
 
@@ -951,12 +1013,12 @@ namespace Main
 
         private int ConvertToPSIRange(int progress)
         {
-            return (int)(((float)progress / 100) * (Constants.MAXPRESSURE - Constants.MINPRESSURE) + Constants.MINPRESSURE);
+            return (int)(((float)progress / 100) * (Constants.PRESSURESETMAX - Constants.PRESSURESETMIN) + Constants.PRESSURESETMIN);
         }
 
         private int ConvertToProgress(string editPressureText)
         {
-            return (int)(((float)System.Int32.Parse(editPressureText) - Constants.MINPRESSURE) / (Constants.MAXPRESSURE - Constants.MINPRESSURE) * 100);
+            return (int)(((float)System.Int32.Parse(editPressureText) - Constants.PRESSURESETMIN) / (Constants.PRESSURESETMAX - Constants.PRESSURESETMIN) * 100);
         }
 
         private Int32 ConvertDataOut(int targetPressure, bool forceIdle = false)
@@ -967,8 +1029,11 @@ namespace Main
             // Array to hold data, in bits.
             var dataBits = new System.Collections.BitArray(dataBytes);
 
+            // Convert target pressure to UART value.
+            Int32 targetPressureUART = ConvertUARTOut(targetPressure);
+
             // Set target pressure bits.
-            string binary = Convert.ToString(targetPressure, 2);
+            string binary = Convert.ToString(targetPressureUART, 2);
             int length = binary.Length;
 
             for (int i = 0; i < length; i++)
@@ -995,52 +1060,74 @@ namespace Main
             return output;
         }
 
-        private void ConvertDataIn(string input)
+        private void ConvertDataIn(byte[] input)
         {
-            // Convert Int32 to data values.
-
             if (input == null)
             {
                 return;
             }
+            
+            // Convert Byte Array to Bit Array.
+            var dataBits = new System.Collections.BitArray(input);
 
-            // Set Current Pressure from input[13:0].
-            Global.currentPressure = Convert.ToInt32(input.Substring(0, 14));
+            // Set string of UART value of Current Pressure from dataBits[13:0].
+            string currentPressureUARTString = "";
+
+            for (int i = 0; i < 14; i++)
+            {
+                if (dataBits[i])
+                {
+                    currentPressureUARTString = "1" + currentPressureUARTString;
+                }
+                else
+                {
+                    currentPressureUARTString = "0" + currentPressureUARTString;
+                }
+            }
+
+            // Set UART value of Current Pressure from string of UART value of Current Pressure.
+            Int32 currentPressureUART = Convert.ToInt32(currentPressureUARTString, 2);
+
+            // Convert from UART value to actual pressure value.
+            Global.currentPressure = ConvertUARTIn(currentPressureUART);
 
             // Set Pressure Sensor Fault Flag from input[16].
-            Global.pressureFault = Convert.ToBoolean(input[16]);
+            Global.pressureFault = dataBits[16];
 
             // Set Status from input[18:17].
-            switch (Convert.ToInt32(input.Substring(17, 2)))
+            if (!dataBits[18] && !dataBits[17])
             {
-                case 1:
-                    {
-                        // Idle.
-                        Global.status = 1;
-                        break;
-                    }
-                case 2:
-                    {
-                        // Releasing.
-                        Global.status = 2;
-                        break;
-                    }
-                case 3:
-                    {
-                        // Pressurizing.
-                        Global.status = 3;
-                        break;
-                    }
-                default:
-                    {
-                        // Initializing.
-                        Global.status = 0;
-                        break;
-                    }
+                Global.status = 0;
+            }
+            else if (!dataBits[18] && dataBits[17])
+            {
+                Global.status = 1;
+            }
+            else if (dataBits[18] && !dataBits[17])
+            {
+                Global.status = 2;
+            }
+            else if (dataBits[18] && dataBits[17])
+            {
+                Global.status = 3;
             }
 
             // Set Battery Shutdown from input[19].
-            Global.batteryShutdown = Convert.ToBoolean(input[19]);
+            Global.batteryShutdown = dataBits[19];
+
+            ;
+        }
+
+        private Int32 ConvertUARTOut(Int32 output)
+        {
+            return (((output - Constants.PRESSUREMIN) * (Constants.OUTPUTMAX - Constants.OUTPUTMIN)) / 
+                (Constants.PRESSUREMAX - Constants.PRESSUREMIN)) + Constants.OUTPUTMIN;
+        }
+
+        private Int32 ConvertUARTIn(Int32 input)
+        {
+            return (((input - Constants.OUTPUTMIN) * (Constants.PRESSUREMAX - Constants.PRESSUREMIN)) / 
+                (Constants.OUTPUTMAX - Constants.OUTPUTMIN)) + Constants.PRESSUREMIN;
         }
     }
 
@@ -1099,7 +1186,7 @@ namespace Main
             }
         }
 
-        public string Read()
+        public byte[] Read()
         {
             // Returns input if Read operation is successful; returns null otherwise.
 
@@ -1161,8 +1248,7 @@ namespace Main
             return (BluetoothLeService)BluetoothLeService.BluetoothService;
         }
     }
-
-    // Various callback methods defined by the BLE API.
+    
     public class GattCallback : BluetoothGattCallback
     {
         public BluetoothManager mBluetoothManager { get; set; }
@@ -1177,19 +1263,15 @@ namespace Main
         public DeviceControlActivity mDeviceControlActivity = new DeviceControlActivity();
         public BluetoothGattCharacteristic mGattCharacteristic;
 
-        public string data;
+        public byte[] data;
 
         public override void OnConnectionStateChange(BluetoothGatt gatt, GattStatus status, ProfileState newState)
         {
             base.OnConnectionStateChange(gatt, status, newState);
 
-            string intentAction;
-
             if (newState == ProfileState.Connected)
             {
-                intentAction = BluetoothLeService.ACTION_GATT_CONNECTED;
                 mConnectionState = BluetoothLeService.STATE_CONNECTED;
-                BroadcastUpdate(intentAction);
 
                 // Connected to GATT server.
                 // Attempting to start servce discovery...
@@ -1205,14 +1287,11 @@ namespace Main
             }
             else if (newState == ProfileState.Disconnected)
             {
-                intentAction = BluetoothLeService.ACTION_GATT_DISCONNECTED;
-                mConnectionState = BluetoothLeService.STATE_CONNECTED;
                 // Disconnected from GATT server.
-                BroadcastUpdate(intentAction);
+                mConnectionState = BluetoothLeService.STATE_DISCONNECTED;
             }
         }
-
-        // New services discovered.
+        
         public override void OnServicesDiscovered(BluetoothGatt gatt, GattStatus status)
         {
             base.OnServicesDiscovered(gatt, status);
@@ -1220,20 +1299,23 @@ namespace Main
             if (status == GattStatus.Success)
             {
                 // Service discovery successful.
-                BroadcastUpdate(BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED);
-
+                ;
+                
                 // Gathering available GATT services...
                 mDeviceControlActivity.DisplayGattServices(gatt.Services);
 
                 // Read/Write commands may now be issued.
+                ;
+
+                // Write once, then continually Read.
+                Global.startWrite = true;
             }
             else
             {
                 // Service discovery failed.
             }
         }
-
-        // Result of a characteristic read operation.
+        
         public override void OnCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, GattStatus status)
         {
             base.OnCharacteristicRead(gatt, characteristic, status);
@@ -1254,30 +1336,18 @@ namespace Main
             }
         }
 
-        private void BroadcastUpdate(string action)
-        {
-            Intent intent = new Intent(action);
-
-            // Send broadcast.
-            ;
-        }
-
         private void BroadcastUpdate(string action, BluetoothGattCharacteristic characteristic)
         {
             Intent intent = new Intent(action);
 
-            // Special handling goes here.
-            data = characteristic.GetStringValue(0);
-
-            // Send broadcast.
-            ;
+            data = characteristic.GetValue();
         }
 
-        public string Read()
+        public byte[] Read()
         {
             // Returns input if Read operation is successful; returns null otherwise.
 
-            string input = null;
+            byte[] input = null;
 
             // Check if mDeviceControlActivity has been instantiated.
             if (mDeviceControlActivity == null)
@@ -1290,6 +1360,9 @@ namespace Main
             if (mBluetoothGatt.ReadCharacteristic(mGattCharacteristic))
             {
                 // Read operation successful.
+
+                // Delay to allow data to be recieved.
+                System.Threading.Thread.Sleep(Constants.READWAIT);
 
                 // Return the data received from callback.
                 input = this.data;
@@ -1339,32 +1412,7 @@ namespace Main
         {
             string action = intent.Action;
 
-            if (BluetoothLeService.ACTION_GATT_CONNECTED.Equals(action))
-            {
-                // mConnected = true;
-                ;
-                // updateConnectionState(R.string.connected);
-                ;
-                // invalidateOptionsMenu();
-                ;
-            }
-            else if (BluetoothLeService.ACTION_GATT_DISCONNECTED.Equals(action))
-            {
-                // mConnected = false;
-                ;
-                // updateConnectionState(R.string.disconnected);
-                ;
-                // invalidateOptionsMenu();
-                ;
-                // clearUI();
-                ;
-            }
-            else if (BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED.Equals(action))
-            {
-                // displayGattServices(mBluetoothLeService.getSupportedGattServices());
-                ;
-            }
-            else if (BluetoothLeService.ACTION_DATA_AVAILABLE.Equals(action))
+            if (BluetoothLeService.ACTION_DATA_AVAILABLE.Equals(action))
             {
                 string data = intent.GetStringExtra(BluetoothLeService.EXTRA_DATA);
             }
