@@ -62,6 +62,12 @@ namespace Main
         public static bool startWrite = false;
 
         public static bool isConnected = false;
+
+        public static string loadText;
+        public static float loadProgress = 0;
+        public static int itemsToLoad = 10;
+        public static ProgressDialog loadingProgressDialog;
+        public static string loadingProgressDialogTitle;
     }
 
     public class SampleGattAttributes
@@ -114,7 +120,8 @@ namespace Main
 
         LinearLayout loadingScreenLayout1;
         LinearLayout loadingScreenLayout2;
-        TextView loadingTextView;
+        Space vLoadingMargin;
+        Space hLoadingMargin;
         ImageView loadingWheel;
 
         TextView currentPressureView;
@@ -136,11 +143,6 @@ namespace Main
         SeekBar seekBar;
         Button setButton;
 
-        public LinearLayout layout;
-        public Button readButton;
-        public Button writeButton;
-        public TextView debug;
-
         public BluetoothAdapter mBluetoothAdapter;
         public static BluetoothManager mBluetoothManager;
         public BluetoothDeviceReceiver mReceiver;
@@ -154,6 +156,13 @@ namespace Main
         protected override void OnCreate(Bundle bundle)
         {
             base.OnCreate(bundle);
+
+            Global.loadingProgressDialog = new ProgressDialog(this);
+            Global.loadingProgressDialog.SetProgressStyle(ProgressDialogStyle.Horizontal);
+            Global.loadingProgressDialogTitle = "Loading...";
+            Global.loadingProgressDialog.SetTitle(Global.loadingProgressDialogTitle);
+            Global.loadingProgressDialog.SetMessage("Initializing...");
+            Global.loadingProgressDialog.Show();
 
             widthInDp = Resources.DisplayMetrics.WidthPixels * ((float)Resources.DisplayMetrics.DensityDpi / 160f);
             heightInDp = Resources.DisplayMetrics.HeightPixels * ((float)Resources.DisplayMetrics.DensityDpi / 160f);
@@ -258,12 +267,9 @@ namespace Main
             loadingScreenLayout1.SetGravity(Android.Views.GravityFlags.Center);
             loadingScreenLayout1.SetPadding((int)(Resources.DisplayMetrics.WidthPixels * 0.04), (int)(Resources.DisplayMetrics.HeightPixels * 0.04), 0, 0);
 
-            loadingTextView = new TextView(this);
-            loadingScreenLayout1.AddView(loadingTextView);
-            loadingTextView.Gravity = Android.Views.GravityFlags.Center;
-            loadingTextView.Text = "Loading...";
-            loadingTextView.TextSize = (int)(Resources.DisplayMetrics.WidthPixels * 0.0175);
-            loadingTextView.SetTextColor(Android.Graphics.Color.White);
+            vLoadingMargin = new Space(this);
+            loadingScreenLayout1.AddView(vLoadingMargin);
+            vLoadingMargin.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.6375);
 
             loadingScreenLayout2 = new LinearLayout(this);
             Global.layout.AddView(loadingScreenLayout2);
@@ -271,11 +277,19 @@ namespace Main
             loadingScreenLayout2.SetGravity(Android.Views.GravityFlags.Center);
             loadingScreenLayout2.SetPadding((int)(Resources.DisplayMetrics.WidthPixels * 0.04), (int)(Resources.DisplayMetrics.HeightPixels * 0.04), 0, 0);
 
+            hLoadingMargin = new Space(this);
+            loadingScreenLayout2.AddView(hLoadingMargin);
+            hLoadingMargin.LayoutParameters.Width = (int)(Resources.DisplayMetrics.WidthPixels * 0.6);
+            
+            #region Loading Wheel
+
             loadingWheel = new ImageView(this);
             loadingScreenLayout2.AddView(loadingWheel);
             loadingWheel.SetBackgroundResource(Resources.GetIdentifier("icon_bike_tire_white", "drawable", PackageName));
-            loadingWheel.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.2);
-            loadingWheel.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.2);
+            loadingWheel.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.125);
+            loadingWheel.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.125);
+
+            #endregion
 
             #endregion
 
@@ -474,11 +488,14 @@ namespace Main
             if (Sdk < 23)
             {
                 // Sdk must be at least 23.
+                Global.loadText = "Sdk must be at least 23.";
                 return;
             }
             else
             {
                 // Obtaining permissions...
+                Global.loadText = "Obtaining permissions...";
+                Global.loadingProgressDialog.Progress = 10;
             }
 
             GetLocationPermission();
@@ -499,35 +516,43 @@ namespace Main
             if (CheckSelfPermission(permission) == (int)Permission.Granted)
             {
                 // All permissions have been previously granted.
+                Global.loadText = "All permissions have been previously granted.";
+                Global.loadingProgressDialog.Progress = 25;
                 return;
             }
 
             // Requesting permissions...
+            Global.loadText = "Requesting permissions...";
+            Global.loadingProgressDialog.Progress = 25;
             RequestPermissions(PermissionsLocation, RequestLocationId);
         }
 
         private void LoadingScreenDots()
         {
-            if (loadingTextView == null)
+            if (Global.loadingProgressDialog == null)
             {
                 return;
             }
 
-            if (loadingTextView.Text == "Loading...")
+            if (Global.loadingProgressDialogTitle == "Loading...")
             {
-                this.RunOnUiThread((() => loadingTextView.Text = "Loading   "));
+                Global.loadingProgressDialogTitle = "Loading";
+                this.RunOnUiThread((() => Global.loadingProgressDialog.SetTitle(Global.loadingProgressDialogTitle)));
             }
-            else if (loadingTextView.Text == "Loading   ")
+            else if (Global.loadingProgressDialogTitle == "Loading")
             {
-                this.RunOnUiThread((() => loadingTextView.Text = "Loading.  "));
+                Global.loadingProgressDialogTitle = "Loading.";
+                this.RunOnUiThread((() => Global.loadingProgressDialog.SetTitle(Global.loadingProgressDialogTitle)));
             }
-            else if (loadingTextView.Text == "Loading.  ")
+            else if (Global.loadingProgressDialogTitle == "Loading.")
             {
-                this.RunOnUiThread((() => loadingTextView.Text = "Loading.. "));
+                Global.loadingProgressDialogTitle = "Loading..";
+                this.RunOnUiThread((() => Global.loadingProgressDialog.SetTitle(Global.loadingProgressDialogTitle)));
             }
-            else if (loadingTextView.Text == "Loading.. ")
+            else if (Global.loadingProgressDialogTitle == "Loading..")
             {
-                this.RunOnUiThread((() => loadingTextView.Text = "Loading..."));
+                Global.loadingProgressDialogTitle = "Loading...";
+                this.RunOnUiThread((() => Global.loadingProgressDialog.SetTitle(Global.loadingProgressDialogTitle)));
             }
         }
 
@@ -543,6 +568,9 @@ namespace Main
 
         private void RefreshView()
         {
+            // Refresh loading text.
+            this.RunOnUiThread((() => Global.loadingProgressDialog.SetMessage(Global.loadText)));
+
             // Refresh Current Pressure.
             this.RunOnUiThread((() => currentPressureView.Text = "Current Pressure: " + Global.currentPressure + " psi"));
 
@@ -959,7 +987,10 @@ namespace Main
 
             try
             {
-                loadingScreenLayout1.RemoveView(loadingTextView);
+                Global.loadingProgressDialog.Dismiss();
+
+                loadingScreenLayout1.RemoveView(vLoadingMargin);
+                loadingScreenLayout2.RemoveView(hLoadingMargin);
                 loadingScreenLayout2.RemoveView(loadingWheel);
 
                 Global.layout.RemoveView(loadingScreenLayout1);
@@ -1306,6 +1337,8 @@ namespace Main
                     found = true;
 
                     // Device was found.
+                    Global.loadText = "Device was found.";
+                    Global.loadingProgressDialog.Progress = 50;
 
                     // Cancelling discovery...
                     mBluetoothAdapter.CancelDiscovery();
@@ -1321,6 +1354,8 @@ namespace Main
             if (action == BluetoothAdapter.ActionDiscoveryStarted)
             {
                 // Discovery started...
+                Global.loadText = "Discovery started...";
+                Global.loadingProgressDialog.Progress = 30;
             }
 
             if (action == BluetoothAdapter.ActionDiscoveryFinished)
@@ -1330,6 +1365,7 @@ namespace Main
                 if (!found)
                 {
                     // Device was not found.
+                    Global.loadText = "Device was not found.";
                 }
             }
         }
@@ -1422,7 +1458,12 @@ namespace Main
                 mConnectionState = BluetoothLeService.STATE_CONNECTED;
 
                 // Connected to GATT server.
+                Global.loadText = "Connected to GATT server.";
+                Global.loadingProgressDialog.Progress = 75;
+
                 // Attempting to start servce discovery...
+                Global.loadText = "Attempting to start service discovery...";
+                Global.loadingProgressDialog.Progress = 80;
 
                 try
                 {
@@ -1431,11 +1472,13 @@ namespace Main
                 catch
                 {
                     // Remote service discovery could not be started.
+                    Global.loadText = "Remote service discovery could not be started.";
                 }
             }
             else if (newState == ProfileState.Disconnected)
             {
                 // Disconnected from GATT server.
+                Global.loadText = "Disconnected from GATT server.";
                 mConnectionState = BluetoothLeService.STATE_DISCONNECTED;
             }
         }
@@ -1447,11 +1490,18 @@ namespace Main
             if (status == GattStatus.Success)
             {
                 // Service discovery successful.
-                
+                Global.loadText = "Service discovery successful.";
+                Global.loadingProgressDialog.Progress = 90;
+
                 // Gathering available GATT services...
+                Global.loadText = "Gathering available GATT services...";
+                Global.loadingProgressDialog.Progress = 95;
                 mDeviceControlActivity.DisplayGattServices(gatt.Services);
 
                 // Read/Write commands may now be issued.
+                Global.loadText = "Bluetooth connection established.";
+                Global.loadingProgressDialog.Progress = 100;
+
                 // Load Main Views.
                 Global.isConnected = true;
 
@@ -1461,6 +1511,7 @@ namespace Main
             else
             {
                 // Service discovery failed.
+                Global.loadText = "Service discovery failed.";
             }
         }
         
