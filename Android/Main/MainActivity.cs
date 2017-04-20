@@ -23,21 +23,24 @@ namespace Main
 {
     public static class Constants
     {
-        public const int PRESSURESTART = 35;
+        public const int PRESSURESTART = 20;
         public const int PRESSUREMIN = 1;
         public const int PRESSUREMAX = 150;
-        public const int PRESSURESETMIN = 1;
-        public const int PRESSURESETMAX = 70;
+        public const int PRESSURESETMIN = 20;
+        public const int PRESSURESETMAX = 40;
         public const int OUTPUTMIN = 1648;
         public const int OUTPUTMAX = 14745;
         public const int MAXPRESETS = 5;
-        public const int PERIOD = 50;
+        public const int PERIOD = 75;
         public const int READWAIT = 20;
 
         public const int REQUEST_ENABLE_BT = 1;
 
         public const string LIST_NAME = "NAME";
         public const string LIST_UUID = "UUID";
+
+        public const string DEVICE_ADDRESS = "E4:24:B2:83:07:6C";
+        public const string DEVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
     }
 
     public static class Global
@@ -50,6 +53,7 @@ namespace Main
         public static bool pressureFault;
         public static int status;
         public static bool batteryShutdown;
+        public static bool lowCO2;
 
         public static LinearLayout layout;
         public static List<LinearLayout> Presets;
@@ -68,6 +72,8 @@ namespace Main
         public static int itemsToLoad = 10;
         public static ProgressDialog loadingProgressDialog;
         public static string loadingProgressDialogTitle;
+
+        public static string charaList = "";
     }
 
     public class SampleGattAttributes
@@ -77,16 +83,9 @@ namespace Main
         private static Dictionary<string, string> Attributes = new Dictionary<string, string>()
         {
 			// Sample Services.
-            {   "0000180a-0000-1000-8000-00805f9b34fb", "Device Information Service"    },
-            {   "f0001110-0451-4000-b000-000000000000", "LED Service"                   },
-            {   "f0001111-0451-4000-b000-000000000000", "LED0 State"                    },
-            {   "f0001112-0451-4000-b000-000000000000", "LED1 State"                    },
-            {   "f0001120-0451-4000-b000-000000000000", "Button Service"                },
-            {   "f0001121-0451-4000-b000-000000000000", "Button0 State"                 },
-            {   "f0001122-0451-4000-b000-000000000000", "Button1 State"                 },
-            {   "f0001130-0451-4000-b000-000000000000", "Data Service"                  },
-            {   "f0001131-0451-4000-b000-000000000000", "String char"                   },
-            {   "f0001132-0451-4000-b000-000000000000", "Stream char"                   },
+            {   "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "Device Information Service"    },
+            {   "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "Tx"                            },
+            {   "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "Rx"                            },
 
 			// Sample Characteristics.
             {   "00002a29-0000-1000-8000-00805f9b34fb", "Manufacturer Name String"      },
@@ -122,7 +121,7 @@ namespace Main
         LinearLayout loadingScreenLayout2;
         Space vLoadingMargin;
         Space hLoadingMargin;
-        ImageView loadingWheel;
+        ImageView loadingWheel1;
 
         TextView currentPressureView;
         TextView targetPressureView;
@@ -158,6 +157,7 @@ namespace Main
             base.OnCreate(bundle);
 
             Global.loadingProgressDialog = new ProgressDialog(this);
+            Global.loadingProgressDialog.SetCancelable(false);
             Global.loadingProgressDialog.SetProgressStyle(ProgressDialogStyle.Horizontal);
             Global.loadingProgressDialogTitle = "Loading...";
             Global.loadingProgressDialog.SetTitle(Global.loadingProgressDialogTitle);
@@ -283,11 +283,11 @@ namespace Main
             
             #region Loading Wheel
 
-            loadingWheel = new ImageView(this);
-            loadingScreenLayout2.AddView(loadingWheel);
-            loadingWheel.SetBackgroundResource(Resources.GetIdentifier("icon_bike_tire_white", "drawable", PackageName));
-            loadingWheel.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.125);
-            loadingWheel.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.125);
+            loadingWheel1 = new ImageView(this);
+            loadingScreenLayout2.AddView(loadingWheel1);
+            loadingWheel1.SetBackgroundResource(Resources.GetIdentifier("icon_bike_tire_white", "drawable", PackageName));
+            loadingWheel1.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.125);
+            loadingWheel1.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.125);
 
             #endregion
 
@@ -463,6 +463,10 @@ namespace Main
 
             #endregion
 
+            // Use to test artificial connection.
+            // Global.isConnected = true;
+            // Global.startRead = true;
+
             LoadLoadingViews();
 
             #region Initialize Timers
@@ -479,6 +483,11 @@ namespace Main
             read = new System.Threading.Timer(x => Read(), null, Constants.PERIOD / 2, Constants.PERIOD);
 
             #endregion
+        }
+
+        protected override void OnDestroy()
+        {
+            
         }
 
         public void TryGetLocation()
@@ -558,45 +567,67 @@ namespace Main
 
         private void LoadingScreenWheel()
         {
-            if (loadingWheel == null)
+            if (loadingWheel1 == null)
             {
                 return;
             }
 
-            loadingWheel.Rotation += (float)1.5;
+            this.RunOnUiThread((() => loadingWheel1.Rotation += (float)1.5));
         }
 
         private void RefreshView()
         {
-            // Refresh loading text.
-            this.RunOnUiThread((() => Global.loadingProgressDialog.SetMessage(Global.loadText)));
+            try
+            {
+                // Refresh loading text.
+                this.RunOnUiThread((() => Global.loadingProgressDialog.SetMessage(Global.loadText)));
+            }
+            catch { };
 
-            // Refresh Current Pressure.
-            this.RunOnUiThread((() => currentPressureView.Text = "Current Pressure: " + Global.currentPressure + " psi"));
+            try
+            {
+                // Refresh Current Pressure.
+                this.RunOnUiThread((() => currentPressureView.Text = "Current Pressure: " + Global.currentPressure + " psi"));
 
-            // Refresh Target Pressure.
-            this.RunOnUiThread((() => targetPressureView.Text = "Target Pressure: " + Global.targetPressure + " psi"));
+                // Refresh Target Pressure.
+                this.RunOnUiThread((() => targetPressureView.Text = "Target Pressure: " + Global.targetPressure + " psi"));
+            }
+            catch { };
 
             // Refresh Status.
-            if (Global.status == 0)
+            try
             {
-                this.RunOnUiThread((() => statusView.Text = "Initializing..."));
-            }
+                if (Global.status == 0)
+                {
+                    this.RunOnUiThread((() => statusView.Text = "Initializing..."));
+                }
 
-            if (Global.status == 1)
-            {
-                this.RunOnUiThread((() => statusView.Text = "Pressure Stabilized."));
-            }
+                if (Global.status == 1)
+                {
+                    this.RunOnUiThread((() => statusView.Text = "Pressure Stabilized."));
+                }
 
-            if (Global.status == 2)
-            {
-                this.RunOnUiThread((() => statusView.Text = "Releasing..."));
-            }
+                if (Global.status == 2)
+                {
+                    this.RunOnUiThread((() => statusView.Text = "Releasing..."));
+                }
 
-            if (Global.status == 3)
-            {
-                this.RunOnUiThread((() => statusView.Text = "Pressurizing..."));
+                if (Global.status == 3)
+                {
+                    this.RunOnUiThread((() => statusView.Text = "Pressurizing..."));
+                }
+
+                if (Global.lowCO2)
+                {
+                    this.RunOnUiThread((() => statusView.Text = "Low CO2: Replace CO2 Cartridge"));
+                    this.RunOnUiThread((() => statusView.SetTextColor(Android.Content.Res.ColorStateList.ValueOf(Android.Graphics.Color.Red))));
+                }
+                else
+                {
+                    this.RunOnUiThread((() => statusView.SetTextColor(Android.Content.Res.ColorStateList.ValueOf(Android.Graphics.Color.White))));
+                }
             }
+            catch { };
 
             try
             {
@@ -645,17 +676,24 @@ namespace Main
         {
             if (Global.startWrite)
             {
-                // mReceiver.Write(ConvertDataOut(Global.targetPressure, Global.forceIdle));
-
-                // On first Write, load Main Views.
-                if (Global.startWrite && !Global.startRead)
+                if (mReceiver.Write(ConvertDataOut(Global.targetPressure, Global.forceIdle)))
                 {
-                    LoadMainViews();
-                }
+                    // Write operation successful.
+                    ;
 
-                // Stop writing, start reading.
-                Global.startWrite = false;
-                Global.startRead = true;
+                    // On first successful write, load Main Views.
+                    if (Global.isConnected)
+                    {
+                        LoadMainViews();
+
+                        Global.isConnected = false;
+                    }
+                }
+                else
+                {
+                    // Write operation failed.
+                    ;
+                }
             }
         }
 
@@ -972,6 +1010,8 @@ namespace Main
 
         private void LoadMainViews()
         {
+            ;
+
             #region Stop Loading Screen Timers
 
             try
@@ -985,60 +1025,67 @@ namespace Main
 
             #region Remove Loading Screen Views
 
-            try
+            this.RunOnUiThread((() =>
             {
-                Global.loadingProgressDialog.Dismiss();
+                try
+                {
+                    loadingScreenLayout1.RemoveView(vLoadingMargin);
+                    loadingScreenLayout2.RemoveView(hLoadingMargin);
+                    loadingScreenLayout2.RemoveView(loadingWheel1);
 
-                loadingScreenLayout1.RemoveView(vLoadingMargin);
-                loadingScreenLayout2.RemoveView(hLoadingMargin);
-                loadingScreenLayout2.RemoveView(loadingWheel);
-
-                Global.layout.RemoveView(loadingScreenLayout1);
-                Global.layout.RemoveView(loadingScreenLayout2);
-            }
-            catch { };
+                    Global.layout.RemoveView(loadingScreenLayout1);
+                    Global.layout.RemoveView(loadingScreenLayout2);
+                }
+                catch { };
+            }));
 
             #endregion
 
             #region Remove Edit Views
 
-            try
+            this.RunOnUiThread((() =>
             {
-                editPressureLayout1.RemoveView(backButton);
-                editPressureLayout2.RemoveView(editPressureName);
-                editPressureLayout3.RemoveView(editPressureValue);
-                editPressureLayout3.RemoveView(units);
-                editPressureLayout4.RemoveView(seekBar);
-                editPressureLayout5.RemoveView(setButton);
+                try
+                {
+                    editPressureLayout1.RemoveView(backButton);
+                    editPressureLayout2.RemoveView(editPressureName);
+                    editPressureLayout3.RemoveView(editPressureValue);
+                    editPressureLayout3.RemoveView(units);
+                    editPressureLayout4.RemoveView(seekBar);
+                    editPressureLayout5.RemoveView(setButton);
 
-                Global.layout.RemoveView(editPressureLayout1);
-                Global.layout.RemoveView(editPressureLayout2);
-                Global.layout.RemoveView(editPressureLayout3);
-                Global.layout.RemoveView(editPressureLayout4);
-                Global.layout.RemoveView(editPressureLayout5);
-            }
-            catch { };
+                    Global.layout.RemoveView(editPressureLayout1);
+                    Global.layout.RemoveView(editPressureLayout2);
+                    Global.layout.RemoveView(editPressureLayout3);
+                    Global.layout.RemoveView(editPressureLayout4);
+                    Global.layout.RemoveView(editPressureLayout5);
+                }
+                catch { };
+            }));
 
             #endregion
 
             #region Load Main Views
 
-            try
+            this.RunOnUiThread((() =>
             {
-                Global.layout.AddView(vMargin1);
-                Global.layout.AddView(currentPressureView);
-                Global.layout.AddView(targetPressureView);
-                Global.layout.AddView(statusView);
-                Global.layout.AddView(vMargin2);
-
-                foreach (LinearLayout preset in Global.Presets)
+                try
                 {
-                    Global.layout.AddView(preset);
-                }
+                    Global.layout.AddView(vMargin1);
+                    Global.layout.AddView(currentPressureView);
+                    Global.layout.AddView(targetPressureView);
+                    Global.layout.AddView(statusView);
+                    Global.layout.AddView(vMargin2);
 
-                Global.layout.AddView(addButton);
-            }
-            catch { };
+                    foreach (LinearLayout preset in Global.Presets)
+                    {
+                        Global.layout.AddView(preset);
+                    }
+
+                    Global.layout.AddView(addButton);
+                }
+                catch { };
+            }));
 
             #endregion
         }
@@ -1120,12 +1167,9 @@ namespace Main
             activateButton.Text = name;
             activateButton.Tag = "Activate Button " + index.ToString();
             layout.AddView(activateButton);
-
             activateButton.Gravity = Android.Views.GravityFlags.Center;
-
             activateButton.LayoutParameters.Width = (int)(Resources.DisplayMetrics.WidthPixels * 0.5);
             activateButton.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.075);
-
             activateButton.TextSize = (int)(Resources.DisplayMetrics.WidthPixels * 0.0125);
             activateButton.SetAllCaps(false);
             activateButton.SetTextColor(Android.Graphics.Color.Rgb(255, 255, 255)); // White
@@ -1228,7 +1272,8 @@ namespace Main
             }
 
             // Set Force Idle bit.
-            dataBits.Set(16, forceIdle);
+            // dataBits.Set(16, forceIdle);
+            dataBits.Set(16, true);
 
             // Copy bit array to byte array.
             dataBits.CopyTo(dataBytes, 0);
@@ -1242,6 +1287,10 @@ namespace Main
         private void ConvertDataIn(byte[] input)
         {
             if (input == null)
+            {
+                return;
+            }
+            else if (input.Length != 3)
             {
                 return;
             }
@@ -1294,7 +1343,8 @@ namespace Main
             // Set Battery Shutdown from input[19].
             Global.batteryShutdown = dataBits[19];
 
-            ;
+            // Set Low CO2 from input[20];
+            Global.lowCO2 = dataBits[20];
         }
 
         private Int32 ConvertUARTOut(Int32 output)
@@ -1314,8 +1364,7 @@ namespace Main
     {
         public BluetoothAdapter mBluetoothAdapter { get; set; }
         public BluetoothGatt mBluetoothGatt;
-
-        private string btAddress = "CC:78:AB:83:3C:06";
+        
         private bool found = false;
 
         private GattCallback mGattCallback = new GattCallback();
@@ -1332,7 +1381,7 @@ namespace Main
                 string deviceName = device.Name;
                 string deviceAddress = device.Address;
 
-                if (deviceAddress == btAddress)
+                if (deviceAddress == Constants.DEVICE_ADDRESS)
                 {
                     found = true;
 
@@ -1368,6 +1417,17 @@ namespace Main
                     Global.loadText = "Device was not found.";
                 }
             }
+        }
+
+        public void Close()
+        {
+            if (mBluetoothGatt == null)
+            {
+                return;
+            }
+
+            mBluetoothGatt.Close();
+            mBluetoothGatt = null;
         }
 
         public byte[] Read()
@@ -1502,10 +1562,13 @@ namespace Main
                 Global.loadText = "Bluetooth connection established.";
                 Global.loadingProgressDialog.Progress = 100;
 
+                Global.loadingProgressDialog.Dismiss();
+
                 // Load Main Views.
                 Global.isConnected = true;
 
-                // Write once, then continually Read.
+                // Start Read/Write commands.
+                Global.startRead = true;
                 Global.startWrite = true;
             }
             else
@@ -1525,6 +1588,16 @@ namespace Main
             }
         }
 
+        public override void OnDescriptorRead(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, [GeneratedEnum] GattStatus status)
+        {
+            base.OnDescriptorRead(gatt, descriptor, status);
+
+            if (status == GattStatus.Success)
+            {
+                BroadcastUpdate(BluetoothLeService.ACTION_DATA_AVAILABLE, descriptor);
+            }
+        }
+
         public override void OnCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, [GeneratedEnum] GattStatus status)
         {
             base.OnCharacteristicWrite(gatt, characteristic, status);
@@ -1535,11 +1608,27 @@ namespace Main
             }
         }
 
+        public override void OnCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic)
+        {
+            base.OnCharacteristicChanged(gatt, characteristic);
+
+            data = characteristic.GetValue();
+
+            ;
+        }
+
         private void BroadcastUpdate(string action, BluetoothGattCharacteristic characteristic)
         {
             Intent intent = new Intent(action);
 
             data = characteristic.GetValue();
+        }
+
+        private void BroadcastUpdate(string action, BluetoothGattDescriptor descriptor)
+        {
+            Intent intent = new Intent(action);
+
+            data = descriptor.GetValue();
         }
 
         public byte[] Read()
@@ -1554,21 +1643,36 @@ namespace Main
                 return input;
             }
 
-            mGattCharacteristic = mDeviceControlActivity.mGattCharacteristics[5][0];
+            string charaList = Global.charaList;
 
-            if (mBluetoothGatt.ReadCharacteristic(mGattCharacteristic))
+            mGattCharacteristic = mDeviceControlActivity.mGattCharacteristics[4][0];
+            mBluetoothGatt.SetCharacteristicNotification(mGattCharacteristic, true);
+            BluetoothGattDescriptor mGattDescriptor = mGattCharacteristic.GetDescriptor(UUID.FromString(SampleGattAttributes.CLIENT_CHARACTERISTIC_CONFIG));
+            byte[] EnableNotificationValueBytes = new byte[BluetoothGattDescriptor.EnableNotificationValue.Count];
+            BluetoothGattDescriptor.EnableNotificationValue.CopyTo(EnableNotificationValueBytes, 0);
+            mGattDescriptor.SetValue(EnableNotificationValueBytes);
+
+            string properties = mGattCharacteristic.Properties.ToString();
+            string uuid = mGattCharacteristic.Uuid.ToString();
+
+
+            if (mBluetoothGatt.WriteDescriptor(mGattDescriptor))
             {
-                // Read operation successful.
+                // Read characteristic operation successful.
+                ;
 
                 // Delay to allow data to be recieved.
                 System.Threading.Thread.Sleep(Constants.READWAIT);
 
                 // Return the data received from callback.
                 input = this.data;
+
+                ;
             }
             else
             {
                 // Read operation failed.
+                ;
             }
 
             return input;
@@ -1581,24 +1685,30 @@ namespace Main
             // Check if mDeviceControlActivity has been instantiated.
             if (mDeviceControlActivity == null)
             {
+                // mDeviceControlActivity was not instantiated.
+                ;
+
                 return false;
             }
 
-            mGattCharacteristic = mDeviceControlActivity.mGattCharacteristics[5][0];
+            mGattCharacteristic = mDeviceControlActivity.mGattCharacteristics[4][1];
+
+            string properties = mGattCharacteristic.Properties.ToString();
+            string uuid = mGattCharacteristic.Uuid.ToString();
 
             mGattCharacteristic.SetValue(output, GattFormat.Uint32, 0);
-
-            BluetoothGattDescriptor mDescriptor = mGattCharacteristic.GetDescriptor(UUID.FromString("f0001131-0451-4000-b000-000000000000"));
 
             if (mBluetoothGatt.WriteCharacteristic(mGattCharacteristic))
             {
                 // Write operation successful.
+                ;
 
                 return true;
             }
             else
             {
                 // Write operation failed.
+                ;
 
                 return false;
             }
@@ -1634,6 +1744,8 @@ namespace Main
             IList<IList<HashMap>> gattCharacteristicData = new List<IList<HashMap>>();
             mGattCharacteristics = new List<IList<BluetoothGattCharacteristic>>();
 
+            int j = 1;
+
             // Loops through available GATT Services.
             foreach (BluetoothGattService gattService in gattServices)
             {
@@ -1652,6 +1764,10 @@ namespace Main
                 IList<BluetoothGattCharacteristic> gattCharacteristics = gattService.Characteristics;
                 IList<BluetoothGattCharacteristic> charas = new List<BluetoothGattCharacteristic>();
 
+                Global.charaList = Global.charaList + j.ToString() + ":\n";
+
+                int i = 1;
+
                 // Loops through available characteristics.
                 foreach (BluetoothGattCharacteristic gattCharacteristic in gattCharacteristics)
                 {
@@ -1667,11 +1783,21 @@ namespace Main
                     currentCharaData.Put(Constants.LIST_UUID, uuid);
 
                     gattCharacteristicGroupData.Add(currentCharaData);
+
+                    Global.charaList = Global.charaList + i.ToString() + ": " + SampleGattAttributes.Lookup(uuid, unknownCharaString) + "(" + uuid.ToString() + ")\n";
+
+                    System.Threading.Thread.Sleep(250);
+
+                    i++;
                 }
+
+                j++;
 
                 mGattCharacteristics.Add(charas);
                 gattCharacteristicData.Add(gattCharacteristicGroupData);
             }
+
+            ;
         }
     }
 }
