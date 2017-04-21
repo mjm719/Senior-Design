@@ -26,13 +26,13 @@ namespace Main
         public const int PRESSURESTART = 20;
         public const int PRESSUREMIN = 1;
         public const int PRESSUREMAX = 150;
-        public const int PRESSURESETMIN = 20;
-        public const int PRESSURESETMAX = 40;
+        public const int PRESSURESETMIN = 1;
+        public const int PRESSURESETMAX = 70;
         public const int OUTPUTMIN = 1648;
         public const int OUTPUTMAX = 14745;
-        public const int MAXPRESETS = 5;
-        public const int PERIOD = 75;
-        public const int READWAIT = 20;
+        public const int MAXPRESETS = 4;
+        public const int PERIOD = 250;
+        public const int READWAIT = 100;
 
         public const int REQUEST_ENABLE_BT = 1;
 
@@ -129,6 +129,10 @@ namespace Main
         Space vMargin1;
         Space vMargin2;
         ImageButton addButton;
+        LinearLayout unstableLayout;
+        Button forceIdleButton;
+        Space hMargin;
+        ImageView loadingWheel2;
 
         LinearLayout editPressureLayout1;
         LinearLayout editPressureLayout2;
@@ -146,8 +150,8 @@ namespace Main
         public static BluetoothManager mBluetoothManager;
         public BluetoothDeviceReceiver mReceiver;
 
-        System.Threading.Timer loadingScreenDots;
-        System.Threading.Timer loadingScreenWheel;
+        System.Threading.Timer loadingDots;
+        System.Threading.Timer loadingWheels;
         System.Threading.Timer refresh;
         System.Threading.Timer read;
         System.Threading.Timer write;
@@ -341,9 +345,49 @@ namespace Main
             addButton = new ImageButton(this);
             Global.layout.AddView(addButton);
             addButton.SetBackgroundResource(Resources.GetIdentifier("icon_add", "drawable", PackageName));
-            addButton.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.05);
-            addButton.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.05);
+            addButton.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.045);
+            addButton.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.045);
             addButton.Click += AddButtonClick;
+
+            #endregion
+
+            #region Unstable Layout
+
+            unstableLayout = new LinearLayout(this);
+            Global.layout.AddView(unstableLayout);
+            unstableLayout.Orientation = Orientation.Horizontal;
+            unstableLayout.SetGravity(Android.Views.GravityFlags.CenterVertical);
+            unstableLayout.SetPadding((int)(Resources.DisplayMetrics.WidthPixels * 0.06), (int)(Resources.DisplayMetrics.HeightPixels * 0.07), (int)(Resources.DisplayMetrics.WidthPixels * 0.05), (int)(Resources.DisplayMetrics.HeightPixels * 0.02));
+
+            #region Force Idle Button
+
+            forceIdleButton = new Button(this);
+            unstableLayout.AddView(forceIdleButton);
+            forceIdleButton.Text = "Cancel";
+            forceIdleButton.Gravity = Android.Views.GravityFlags.Center;
+            forceIdleButton.LayoutParameters.Width = (int)(Resources.DisplayMetrics.WidthPixels * 0.5);
+            forceIdleButton.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.075);
+            forceIdleButton.TextSize = (int)(Resources.DisplayMetrics.WidthPixels * 0.0125);
+            forceIdleButton.SetAllCaps(false);
+            forceIdleButton.SetTextColor(Android.Graphics.Color.Rgb(255, 255, 255)); // White
+            forceIdleButton.SetBackgroundColor(Android.Graphics.Color.Rgb(255, 0, 0)); // #008000
+            forceIdleButton.Click += ForceIdleButtonClick;
+
+            #endregion
+
+            hMargin = new Space(this);
+            unstableLayout.AddView(hMargin);
+            hMargin.LayoutParameters.Width = (int)(Resources.DisplayMetrics.WidthPixels * 0.16);
+
+            #region Loading Wheel
+
+            loadingWheel2 = new ImageView(this);
+            unstableLayout.AddView(loadingWheel2);
+            loadingWheel2.SetBackgroundResource(Resources.GetIdentifier("icon_bike_tire_white", "drawable", PackageName));
+            loadingWheel2.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.125);
+            loadingWheel2.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.125);
+
+            #endregion
 
             #endregion
 
@@ -357,8 +401,8 @@ namespace Main
 
             // Start out with 2 premade presets.
 
-            AddPreset("Preset 1", Constants.PRESSURESETMIN);
-            AddPreset("Preset 2", Constants.PRESSURESETMAX);
+            AddPreset("Preset 1", 20);
+            AddPreset("Preset 2", 40);
 
             #endregion
 
@@ -463,10 +507,6 @@ namespace Main
 
             #endregion
 
-            // Use to test artificial connection.
-            // Global.isConnected = true;
-            // Global.startRead = true;
-
             LoadLoadingViews();
 
             #region Initialize Timers
@@ -474,8 +514,8 @@ namespace Main
             // http://stackoverflow.com/questions/13019433/calling-method-on-every-x-minutes
 
             // Loading Screen Timers.
-            loadingScreenDots = new System.Threading.Timer(x => LoadingScreenDots(), null, 0, 250);
-            loadingScreenWheel = new System.Threading.Timer(x => LoadingScreenWheel(), null, 0, 10);
+            loadingDots = new System.Threading.Timer(x => LoadingDots(), null, 0, 250);
+            loadingWheels = new System.Threading.Timer(x => LoadingWheels(), null, 0, 10);
 
             // Main Screen Timers.
             refresh = new System.Threading.Timer(x => RefreshView(), null, 0, 10);
@@ -484,10 +524,12 @@ namespace Main
 
             #endregion
         }
-
-        protected override void OnDestroy()
+        
+        protected override void OnStop()
         {
-            
+            base.OnStop();
+
+            mReceiver.Close();
         }
 
         public void TryGetLocation()
@@ -536,7 +578,7 @@ namespace Main
             RequestPermissions(PermissionsLocation, RequestLocationId);
         }
 
-        private void LoadingScreenDots()
+        private void LoadingDots()
         {
             if (Global.loadingProgressDialog == null)
             {
@@ -565,69 +607,141 @@ namespace Main
             }
         }
 
-        private void LoadingScreenWheel()
+        private void LoadingWheels()
         {
             if (loadingWheel1 == null)
             {
                 return;
             }
 
-            this.RunOnUiThread((() => loadingWheel1.Rotation += (float)1.5));
+            this.RunOnUiThread((() =>
+            {
+                try
+                {
+                    loadingWheel1.Rotation += (float)1.5;
+                }
+                catch { };
+
+                try
+                {
+                    loadingWheel2.Rotation += (float)1.5;
+                }
+                catch { };
+            }));
         }
 
         private void RefreshView()
         {
-            try
+            // Refresh loading text.
+            this.RunOnUiThread((() =>
             {
-                // Refresh loading text.
-                this.RunOnUiThread((() => Global.loadingProgressDialog.SetMessage(Global.loadText)));
-            }
-            catch { };
+                try
+                {
+                    Global.loadingProgressDialog.SetMessage(Global.loadText);
+                }
+                catch { };
+            }));
 
-            try
+            // Refresh Current Pressure.
+            this.RunOnUiThread((() =>
             {
-                // Refresh Current Pressure.
-                this.RunOnUiThread((() => currentPressureView.Text = "Current Pressure: " + Global.currentPressure + " psi"));
+                try
+                {
+                    currentPressureView.Text = "Current Pressure: " + Global.currentPressure + " psi";
+                }
+                catch { };
+            }));
 
-                // Refresh Target Pressure.
-                this.RunOnUiThread((() => targetPressureView.Text = "Target Pressure: " + Global.targetPressure + " psi"));
-            }
-            catch { };
+            // Refresh Target Pressure.
+            this.RunOnUiThread((() =>
+            {
+                try
+                {
+                    targetPressureView.Text = "Target Pressure: " + Global.targetPressure + " psi";
+                }
+                catch { };
+            }));
 
             // Refresh Status.
-            try
+            if (Global.lowCO2)
             {
+                this.RunOnUiThread((() =>
+                {
+                    try
+                    {
+                        statusView.Text = "Low CO2: Replace CO2 Cartridge";
+                        statusView.SetTextColor(Android.Content.Res.ColorStateList.ValueOf(Android.Graphics.Color.Red));
+                    }
+                    catch { };
+                }));
+            }
+            else
+            {
+                this.RunOnUiThread((() =>
+                {
+                    try
+                    {
+                        statusView.SetTextColor(Android.Content.Res.ColorStateList.ValueOf(Android.Graphics.Color.White));
+                    }
+                    catch { };
+                }));
+
                 if (Global.status == 0)
                 {
-                    this.RunOnUiThread((() => statusView.Text = "Initializing..."));
+                    this.RunOnUiThread((() =>
+                    {
+                        try
+                        {
+                            statusView.Text = "Initializing...";
+                        }
+                        catch { };
+                    }));
                 }
 
                 if (Global.status == 1)
                 {
-                    this.RunOnUiThread((() => statusView.Text = "Pressure Stabilized."));
+                    Global.forceIdle = false;
+
+                    this.RunOnUiThread((() =>
+                    {
+                        try
+                        {
+                            statusView.Text = "Pressure Stabilized.";
+                        }
+                        catch { };
+
+                        try
+                        {
+                            Global.layout.RemoveView(unstableLayout);
+                        }
+                        catch { };
+                    }));
                 }
 
                 if (Global.status == 2)
                 {
-                    this.RunOnUiThread((() => statusView.Text = "Releasing..."));
+                    this.RunOnUiThread((() =>
+                    {
+                        try
+                        {
+                            statusView.Text = "Releasing...";
+                        }
+                        catch { };
+                    }));
                 }
 
                 if (Global.status == 3)
                 {
-                    this.RunOnUiThread((() => statusView.Text = "Pressurizing..."));
-                }
-
-                if (Global.lowCO2)
-                {
-                    this.RunOnUiThread((() => statusView.Text = "Low CO2: Replace CO2 Cartridge"));
-                    this.RunOnUiThread((() => statusView.SetTextColor(Android.Content.Res.ColorStateList.ValueOf(Android.Graphics.Color.Red))));
-                }
-                else
-                {
-                    this.RunOnUiThread((() => statusView.SetTextColor(Android.Content.Res.ColorStateList.ValueOf(Android.Graphics.Color.White))));
+                    this.RunOnUiThread((() =>
+                    {
+                        try
+                        {
+                            statusView.Text = "Pressurizing...";
+                        }
+                        catch { };
+                    }));
                 }
             }
-            catch { };
 
             try
             {
@@ -638,11 +752,25 @@ namespace Main
 
                     if (Global.status == 2 || Global.status == 3)
                     {
-                        this.RunOnUiThread((() => activateButton.SetBackgroundColor(Android.Graphics.Color.Rgb(128, 128, 128)))); // Gray
+                        this.RunOnUiThread((() =>
+                        {
+                            try
+                            {
+                                activateButton.SetBackgroundColor(Android.Graphics.Color.Rgb(128, 128, 128)); // Gray
+                            }
+                            catch { };
+                        }));
                     }
                     else
                     {
-                        this.RunOnUiThread((() => activateButton.SetBackgroundColor(Android.Graphics.Color.Rgb(0, 128, 0)))); // #008000
+                        this.RunOnUiThread((() =>
+                        {
+                            try
+                            {
+                                activateButton.SetBackgroundColor(Android.Graphics.Color.Rgb(0, 128, 0)); // #008000
+                            }
+                            catch { };
+                        }));
                     }
                 }
             }
@@ -765,6 +893,12 @@ namespace Main
             int value = Constants.PRESSURESETMIN;
 
             LoadEditViews(name, value);
+        }
+
+        private void ForceIdleButtonClick(object sender, EventArgs e)
+        {
+            // Once state changes to idle, forceIdle will be set back to false.
+            Global.forceIdle = true;
         }
 
         private void BackButtonClick(object sender, System.EventArgs e)
@@ -917,7 +1051,13 @@ namespace Main
             // Add preset value to PresetVals.
             Global.PresetVals.Add(val);
 
-            // Remove 'Add' button and all existing presets from view.
+            // Remove 'Add' button, 'Force Idle' button, and all existing presets from view.
+
+            try
+            {
+                Global.layout.RemoveView(unstableLayout);
+            }
+            catch { };
 
             // Remove 'Add' button from view.
             Global.layout.RemoveView(addButton);
@@ -941,6 +1081,12 @@ namespace Main
 
             // Add 'Add' button to view.
             Global.layout.AddView(addButton);
+
+            // If status is 'Releasing' or 'Pressurizing', add back in the 'Force Idle Button' and loading wheel.
+            if (Global.status == 2 || Global.status == 3)
+            {
+                Global.layout.AddView(unstableLayout);
+            }
 
             // Set tags and click events for all buttons in preset.
             int i = Global.Presets.Count;
@@ -981,6 +1127,9 @@ namespace Main
                 }
 
                 Global.layout.RemoveView(addButton);
+                Global.layout.RemoveView(unstableLayout);
+
+                ;
             }
             catch { };
 
@@ -1010,14 +1159,11 @@ namespace Main
 
         private void LoadMainViews()
         {
-            ;
-
             #region Stop Loading Screen Timers
 
             try
             {
-                loadingScreenDots.Change(1000, Timeout.Infinite);
-                loadingScreenWheel.Change(1000, Timeout.Infinite);
+                loadingDots.Change(1000, Timeout.Infinite);
             }
             catch { };
 
@@ -1083,6 +1229,11 @@ namespace Main
                     }
 
                     Global.layout.AddView(addButton);
+
+                    if (Global.status == 2 || Global.status == 3)
+                    {
+                        Global.layout.AddView(unstableLayout);
+                    }
                 }
                 catch { };
             }));
@@ -1111,6 +1262,7 @@ namespace Main
                 }
 
                 Global.layout.RemoveView(addButton);
+                Global.layout.RemoveView(unstableLayout);
             }
             catch { };
 
@@ -1142,14 +1294,12 @@ namespace Main
 
         private LinearLayout CreateLayout(string name, int val, int index)
         {
-            //(int)(Resources.DisplayMetrics.HeightPixels * 0.075);
-
             #region Layout
 
             LinearLayout layout = new LinearLayout(this);
             layout.Orientation = Orientation.Horizontal;
             layout.SetGravity(Android.Views.GravityFlags.Center);
-            layout.SetPadding((int)(Resources.DisplayMetrics.HeightPixels * 0.01), 0, (int)(Resources.DisplayMetrics.HeightPixels * 0.01), (int)(Resources.DisplayMetrics.HeightPixels * 0.02));
+            layout.SetPadding((int)(Resources.DisplayMetrics.WidthPixels * 0.05), 0, (int)(Resources.DisplayMetrics.WidthPixels * 0.05), (int)(Resources.DisplayMetrics.HeightPixels * 0.02));
 
             #endregion
 
@@ -1273,10 +1423,22 @@ namespace Main
 
             // Set Force Idle bit.
             // dataBits.Set(16, forceIdle);
-            dataBits.Set(16, true);
+            dataBits.Set(16, Global.forceIdle);
 
             // Copy bit array to byte array.
             dataBits.CopyTo(dataBytes, 0);
+
+            // Round down any FF's to FE.
+            for (int i = 0; i < dataBytes.Length; i++)
+            {
+                if (dataBytes[i] == 0xFF)
+                {
+                    dataBytes[i] = 0xFE;
+                }
+            }
+
+            // Set byte 4 to FF.
+            dataBytes[3] = 0xFF;
 
             // Convert data to Int32.
             Int32 output = BitConverter.ToInt32(dataBytes, 0);
@@ -1286,15 +1448,27 @@ namespace Main
 
         private void ConvertDataIn(byte[] input)
         {
+            // Failsafe for unexpected data inputs.
             if (input == null)
             {
                 return;
             }
-            else if (input.Length != 3)
+            else if (input.Length > 4)
             {
                 return;
             }
-            
+            else if (input.Length == 1)
+            {
+                if (input[0] == 0x00)
+                {
+                    return;
+                }
+                else
+                {
+                    Array.Resize<byte>(ref input, 2);
+                }
+            }
+
             // Convert Byte Array to Bit Array.
             var dataBits = new System.Collections.BitArray(input);
 
@@ -1318,6 +1492,12 @@ namespace Main
 
             // Convert from UART value to actual pressure value.
             Global.currentPressure = ConvertUARTIn(currentPressureUART);
+
+            // Return if there are no status flags raised.
+            if (input.Length == 2)
+            {
+                return;
+            }
 
             // Set Pressure Sensor Fault Flag from input[16].
             Global.pressureFault = dataBits[16];
@@ -1507,7 +1687,8 @@ namespace Main
         public DeviceControlActivity mDeviceControlActivity = new DeviceControlActivity();
         public BluetoothGattCharacteristic mGattCharacteristic;
 
-        public byte[] data;
+        public byte[] wData;
+        public byte[] rData;
 
         public override void OnConnectionStateChange(BluetoothGatt gatt, GattStatus status, ProfileState newState)
         {
@@ -1612,7 +1793,7 @@ namespace Main
         {
             base.OnCharacteristicChanged(gatt, characteristic);
 
-            data = characteristic.GetValue();
+            rData = characteristic.GetValue();
 
             ;
         }
@@ -1621,14 +1802,14 @@ namespace Main
         {
             Intent intent = new Intent(action);
 
-            data = characteristic.GetValue();
+            wData = characteristic.GetValue();
         }
 
         private void BroadcastUpdate(string action, BluetoothGattDescriptor descriptor)
         {
             Intent intent = new Intent(action);
 
-            data = descriptor.GetValue();
+            rData = descriptor.GetValue();
         }
 
         public byte[] Read()
@@ -1659,13 +1840,12 @@ namespace Main
             if (mBluetoothGatt.WriteDescriptor(mGattDescriptor))
             {
                 // Read characteristic operation successful.
-                ;
 
                 // Delay to allow data to be recieved.
                 System.Threading.Thread.Sleep(Constants.READWAIT);
 
                 // Return the data received from callback.
-                input = this.data;
+                input = this.rData;
 
                 ;
             }
