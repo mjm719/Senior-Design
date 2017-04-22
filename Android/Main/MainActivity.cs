@@ -23,7 +23,7 @@ namespace Main
 {
     public static class Constants
     {
-        public const int PRESSURESTART = 20;
+        public const int PRESSURESTART = 10;
         public const int PRESSUREMIN = 1;
         public const int PRESSUREMAX = 150;
         public const int PRESSURESETMIN = 1;
@@ -132,7 +132,6 @@ namespace Main
         LinearLayout unstableLayout;
         Button forceIdleButton;
         Space hMargin;
-        ImageView loadingWheel2;
 
         LinearLayout editPressureLayout1;
         LinearLayout editPressureLayout2;
@@ -170,7 +169,7 @@ namespace Main
 
             widthInDp = Resources.DisplayMetrics.WidthPixels * ((float)Resources.DisplayMetrics.DensityDpi / 160f);
             heightInDp = Resources.DisplayMetrics.HeightPixels * ((float)Resources.DisplayMetrics.DensityDpi / 160f);
-
+ 
             #region Bluetooth
 
             #region Bluetooth Setup
@@ -212,23 +211,27 @@ namespace Main
 
             // Loading paired devices...
 
-            ICollection<BluetoothDevice> pairedDevices = mBluetoothAdapter.BondedDevices;
-
-            if (pairedDevices.Count > 0)
+            try
             {
-                // There are pre-existing paired devices.
-                // Get the name and address of each device.
+                ICollection<BluetoothDevice> pairedDevices = mBluetoothAdapter.BondedDevices;
 
-                foreach (BluetoothDevice device in pairedDevices)
+                if (pairedDevices.Count > 0)
                 {
-                    string deviceName = device.Name;
-                    string deviceAddress = device.Address;
+                    // There are pre-existing paired devices.
+                    // Get the name and address of each device.
+
+                    foreach (BluetoothDevice device in pairedDevices)
+                    {
+                        string deviceName = device.Name;
+                        string deviceAddress = device.Address;
+                    }
+                }
+                else
+                {
+                    // No paired devices were found.
                 }
             }
-            else
-            {
-                // No paired devices were found.
-            }
+            catch { };
 
             #endregion
 
@@ -378,16 +381,6 @@ namespace Main
             hMargin = new Space(this);
             unstableLayout.AddView(hMargin);
             hMargin.LayoutParameters.Width = (int)(Resources.DisplayMetrics.WidthPixels * 0.16);
-
-            #region Loading Wheel
-
-            loadingWheel2 = new ImageView(this);
-            unstableLayout.AddView(loadingWheel2);
-            loadingWheel2.SetBackgroundResource(Resources.GetIdentifier("icon_bike_tire_white", "drawable", PackageName));
-            loadingWheel2.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.125);
-            loadingWheel2.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.125);
-
-            #endregion
 
             #endregion
 
@@ -621,12 +614,6 @@ namespace Main
                     loadingWheel1.Rotation += (float)1.5;
                 }
                 catch { };
-
-                try
-                {
-                    loadingWheel2.Rotation += (float)1.5;
-                }
-                catch { };
             }));
         }
 
@@ -671,6 +658,14 @@ namespace Main
                     {
                         statusView.Text = "Low CO2: Replace CO2 Cartridge";
                         statusView.SetTextColor(Android.Content.Res.ColorStateList.ValueOf(Android.Graphics.Color.Red));
+
+                        /*
+                        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+                        builder.SetMessage("CO2 cartridge is empty! Replace to continue pressurizing.");
+                        builder.SetCancelable(false);
+                        */
+
+                        ;
                     }
                     catch { };
                 }));
@@ -727,6 +722,12 @@ namespace Main
                             statusView.Text = "Releasing...";
                         }
                         catch { };
+
+                        try
+                        {
+                            Global.layout.AddView(unstableLayout);
+                        }
+                        catch { };
                     }));
                 }
 
@@ -737,6 +738,12 @@ namespace Main
                         try
                         {
                             statusView.Text = "Pressurizing...";
+                        }
+                        catch { };
+
+                        try
+                        {
+                            Global.layout.AddView(unstableLayout);
                         }
                         catch { };
                     }));
@@ -1164,6 +1171,7 @@ namespace Main
             try
             {
                 loadingDots.Change(1000, Timeout.Infinite);
+                loadingWheels.Change(1000, Timeout.Infinite);
             }
             catch { };
 
@@ -1491,7 +1499,16 @@ namespace Main
             Int32 currentPressureUART = Convert.ToInt32(currentPressureUARTString, 2);
 
             // Convert from UART value to actual pressure value.
-            Global.currentPressure = ConvertUARTIn(currentPressureUART);
+            int pressureIn = ConvertUARTIn(currentPressureUART);
+            
+            if (true)
+            {
+                Global.currentPressure = pressureIn;
+            }
+            else
+            {
+                return;
+            }
 
             // Return if there are no status flags raised.
             if (input.Length == 2)
