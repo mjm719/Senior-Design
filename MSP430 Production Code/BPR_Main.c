@@ -70,6 +70,8 @@
 //******************************************************************************
 #include <msp430.h>
 #include <math.h>
+#include <string.h>
+#include <stdio.h>
 
 unsigned char *PRxData;                     // Pointer to RX data
 unsigned char RXByteCtr;
@@ -111,8 +113,8 @@ unsigned int lastPressureCommand = 0;
 #define ForceIdle			1
 #define newCO2				2
 
-char UART_TX[3] = {0x1D, 0x42, 0x04};
-char UART_RX[3];
+char UART_TX[4] = {0x00, 0x00, 0x00, 0x00};
+char UART_RX[4];
 char i;
 char j = 0;
 int currentPressure;
@@ -131,15 +133,8 @@ void wait(unsigned int waitCount);
 
 int main(void)
 {
+
 	WDTCTL = WDTPW + WDTHOLD;                 // Stop WDT
-	P1DIR = 0xFF;                             // All P1.x outputs
-	P1OUT = 0;                                // All P1.x reset
-	P2DIR = 0xFF;                             // All P2.x outputs
-	P2OUT = 0;                                // All P2.x reset
-	P1SEL = BIT1 + BIT2 ;                     // P1.1 = RXD, P1.2=TXD
-	P1SEL2 = BIT1 + BIT2 ;                     // P1.1 = RXD, P1.2=TXD
-	P3DIR = 0xFF;                             // All P3.x outputs
-	P3OUT = 0;                                // All P3.x reset
 
 	DCOCTL = 0;                               	//Select lowest DCOx and MODx settings
 	BCSCTL1 = CALBC1_1MHZ;                    	//Set DCO
@@ -160,6 +155,13 @@ int main(void)
 	P2DIR |= BIT2;
 	P2OUT &= ~BIT2;
 
+	P1SEL = BIT1 + BIT2 ;                     // P1.1 = RXD, P1.2=TXD
+	P1SEL2 = BIT1 + BIT2 ;                     // P1.1 = RXD, P1.2=TXD
+
+	P1DIR = 0x01;
+	// intialize bit 0 of P1 to 0
+	P1OUT = 0x00;
+
 	//I2C Setup
 	P1SEL |= BIT6 + BIT7;                     // Assign I2C pins to USCI_B0
 	P1SEL2|= BIT6 + BIT7;                     // Assign I2C pins to USCI_B0
@@ -172,42 +174,38 @@ int main(void)
 	UCB0CTL1 &= ~UCSWRST;                     // Clear SW reset, resume operation
 	IE2 |= UCB0RXIE;                          // Enable RX interrupt
 
-	//UART Setup
-	UCA0CTL1 |= UCSSEL_2;                     	//SMCLK
-	UCA0BR0 = 104;                            	//1MHz 9600
-	UCA0BR1 = 0;                              	//1MHz 9600
-	UCA0MCTL = UCBRS0;                        	//Modulation UCBRSx = 1
-	UCA0CTL1 &= ~UCSWRST;                     	// **Initialize USCI state machine**
+	  DCOCTL = 0;                               	//Select lowest DCOx and MODx settings
+	  BCSCTL1 = CALBC1_1MHZ;                    	//Set DCO
+	  DCOCTL = CALDCO_1MHZ;
+
+	  UCA0CTL1 |= UCSSEL_2;                     	//SMCLK
+	  UCA0BR0 = 104;                            	//1MHz 9600
+	  UCA0BR1 = 0;                              	//1MHz 9600
+	  UCA0MCTL = UCBRS0;                        	//Modulation UCBRSx = 1
+	  UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
+
+	int count = 0;
+	int baseCase = 1;
 
 	while(1){									//While true to always execute code
-		//previousPressure = currentPressure;
-		//getPressure();
-		//currentPressure = (RxBuffer[0] << 8) | RxBuffer[1];
 
-		//StatusByte |= CurrentStatus0;
-		//StatusByte &= ~CurrentStatus1;
+		previousPressure = currentPressure;
+		getPressure();
+		currentPressure = (RxBuffer[0] << 8) | RxBuffer[1];
 
-		//postPressure();
+		StatusByte |= CurrentStatus0;
+		StatusByte &= ~CurrentStatus1;
+
+		postPressure();
 		sendUART();
 		getValuesUART();
-		//UART_TX[2]++;
-		__delay_cycles(1000000);
 
-/*		count = 0;
+		baseCase = 1;
 
-		P2OUT &= ~BIT0;
-		P2OUT |= BIT2;
-		P2OUT |= BIT1;
+		// && !(StatusByte & lowCO2)			place this in the while
 
-		__delay_cycles(1000000);
-		P2OUT &= ~BIT1;
-		P2OUT |= BIT2;
-		P2OUT |= BIT0;
-
-		__delay_cycles(1000000);
-		*/
-/*
-		while(((currentPressure < desiredPressure - window) || (currentPressure > desiredPressure + window)) && desiredPressure && !(StatusByte & lowCO2)){
+		while(((currentPressure < desiredPressure - window) || (currentPressure > desiredPressure + window)) && desiredPressure){
+			baseCase = 0;
 			if(newStatus & ForceIdle){					// User has sent a command to stop pressurizing
 				break;
 			}
@@ -227,6 +225,7 @@ int main(void)
 				else{
 					StatusByte &= ~lowCO2;
 				}
+
 				count++;
 			}
 			else if(currentPressure > desiredPressure + window){					//Pressure is higher than the desired pressure
@@ -268,7 +267,10 @@ int main(void)
 			//if((StatusByte & CurrentStatus0) && (StatusByte & CurrentStatus1)){
 
 			//}
-		}*/
+		}
+		if(baseCase){
+			wait(1);
+		}
 	}
 }
 
@@ -283,6 +285,7 @@ void __attribute__ ((interrupt(USCIAB0TX_VECTOR))) USCI0TX_ISR (void)
 #endif
 {
 	if (IFG2 & UCB0RXIFG){
+		TACTL = TACLR + MC_0;           			// SMCLK, contmode, interrupt
 		RXByteCtr--;                              // Decrement RX byte counter
 		if (RXByteCtr){
 			*PRxData++ = UCB0RXBUF;                 // Move RX data to address PRxData
@@ -351,6 +354,7 @@ void getPressure(void){
 	RXByteCtr = 2;                          // Load RX byte counter
 	while (UCB0CTL1 & UCTXSTP);             // Ensure stop condition got sent
 	UCB0CTL1 |= UCTXSTT;                    // I2C start condition
+	TACTL = TASSEL_2 + ID_3 + MC_2 + TAIE;  // SMCLK, contmode, interrupt
 	__bis_SR_register(CPUOFF + GIE);        // Enter LPM0 w/ interrupts
 											// Remain in LPM0 until all data
 											// is RX'd
@@ -379,15 +383,29 @@ void postPressure(void){
 	UART_TX[0] = RxBuffer[1];
 	UART_TX[1] = RxBuffer[0];
 	UART_TX[2] = StatusByte;
-	;
+
+	if (currentPressure == 0){
+		P1OUT |= BIT0;
+	}
+	else{
+		P1OUT &= BIT0;
+	}
 }
 
 void getValuesUART(void){
 	if(UART_RX[0] || UART_RX[1]){
 		//lastPressureCommand = desiredPressure;
-		desiredPressure = (UART_RX[1] << 8) | UART_RX[0];
-		newStatus = UART_RX[2];
+		// Check to see if the data sent shifted one over to the right by checking the error check for shift of FF
+		if(UART_RX[0] == 0xFF){
+			desiredPressure = (UART_RX[2] << 8 | UART_RX[1]);
+			newStatus = UART_RX[3];
+		}
+		else{
+			desiredPressure = (UART_RX[1] << 8) | UART_RX[0];
+			newStatus = UART_RX[2];
+		}
 	}
+	//memset(UART_RX, 0, 4);			//Probably not needed
 	if(newStatus & newCO2){
 		StatusByte &= ~lowCO2;
 	}
