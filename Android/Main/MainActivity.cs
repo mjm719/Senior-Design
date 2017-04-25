@@ -23,7 +23,7 @@ namespace Main
 {
     public static class Constants
     {
-        public const int PRESSURESTART = 10;
+        public const int PRESSURESTART = 0;
         public const int PRESSUREMIN = 1;
         public const int PRESSUREMAX = 150;
         public const int PRESSURESETMIN = 1;
@@ -47,6 +47,7 @@ namespace Main
     {
         public static int currentPressure;
         public static int targetPressure;
+        public static int currentView;
 
         public static bool forceIdle;
 
@@ -105,7 +106,7 @@ namespace Main
         }
     }
 
-    [Activity(Label = "BPR", MainLauncher = true, Icon = "@drawable/icon")]
+    [Activity(Label = "BPR", MainLauncher = true, Icon = "@drawable/Site-logo")]
     public class MainActivity : Activity
     {
         static float widthInDp;
@@ -644,19 +645,46 @@ namespace Main
             {
                 try
                 {
-                    targetPressureView.Text = "Target Pressure: " + Global.targetPressure + " psi";
+                    if (Global.targetPressure > 0)
+                    {
+                        targetPressureView.Text = "Target Pressure: " + Global.targetPressure + " psi";
+                    }
+                    else
+                    {
+                        targetPressureView.Text = "Select target pressure.";
+                    }
                 }
                 catch { };
             }));
 
             // Refresh Status.
-            if (Global.lowCO2)
+            if (Global.pressureFault)
             {
                 this.RunOnUiThread((() =>
                 {
                     try
                     {
-                        statusView.Text = "Low CO2: Replace CO2 Cartridge";
+                        statusView.Text = "Error: Check pressure sensor.";
+                        statusView.SetTextColor(Android.Content.Res.ColorStateList.ValueOf(Android.Graphics.Color.Red));
+
+                        /*
+                        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+                        builder.SetMessage("CO2 cartridge is empty! Replace to continue pressurizing.");
+                        builder.SetCancelable(false);
+                        */
+
+                        ;
+                    }
+                    catch { };
+                }));
+            }
+            else if (Global.lowCO2)
+            {
+                this.RunOnUiThread((() =>
+                {
+                    try
+                    {
+                        statusView.Text = "Error: Replace CO2 cartridge.";
                         statusView.SetTextColor(Android.Content.Res.ColorStateList.ValueOf(Android.Graphics.Color.Red));
 
                         /*
@@ -695,19 +723,11 @@ namespace Main
 
                 if (Global.status == 1)
                 {
-                    Global.forceIdle = false;
-
                     this.RunOnUiThread((() =>
                     {
                         try
                         {
                             statusView.Text = "Pressure Stabilized.";
-                        }
-                        catch { };
-
-                        try
-                        {
-                            Global.layout.RemoveView(unstableLayout);
                         }
                         catch { };
                     }));
@@ -722,12 +742,6 @@ namespace Main
                             statusView.Text = "Releasing...";
                         }
                         catch { };
-
-                        try
-                        {
-                            Global.layout.AddView(unstableLayout);
-                        }
-                        catch { };
                     }));
                 }
 
@@ -738,12 +752,6 @@ namespace Main
                         try
                         {
                             statusView.Text = "Pressurizing...";
-                        }
-                        catch { };
-
-                        try
-                        {
-                            Global.layout.AddView(unstableLayout);
                         }
                         catch { };
                     }));
@@ -797,6 +805,16 @@ namespace Main
                 }
             }
             catch { };
+
+            // Force Idle Button Visibility.
+            if ((Global.status == 2 || Global.status == 3) & Global.currentView == 1)
+            {
+                RunOnUiThread ((() => forceIdleButton.Visibility = Android.Views.ViewStates.Visible));
+            }
+            else
+            {
+                RunOnUiThread ((() => forceIdleButton.Visibility = Android.Views.ViewStates.Invisible));
+            }
         }
 
         private void Read()
@@ -906,6 +924,7 @@ namespace Main
         {
             // Once state changes to idle, forceIdle will be set back to false.
             Global.forceIdle = true;
+            Global.targetPressure = 0;
         }
 
         private void BackButtonClick(object sender, System.EventArgs e)
@@ -1114,10 +1133,14 @@ namespace Main
             ImageButton deleteButton = (ImageButton)Global.Presets[i - 1].FindViewWithTag(deleteTag);
             deleteButton.Click += DeleteButtonClick;
             Global.DeleteButtons.Add(deleteButton);
+
+            LoadMainViews();
         }
 
         private void LoadLoadingViews()
         {
+            Global.currentView = 0;
+
             #region Remove Main Views
 
             try
@@ -1166,6 +1189,8 @@ namespace Main
 
         private void LoadMainViews()
         {
+            Global.currentView = 1;
+
             #region Stop Loading Screen Timers
 
             try
@@ -1237,11 +1262,7 @@ namespace Main
                     }
 
                     Global.layout.AddView(addButton);
-
-                    if (Global.status == 2 || Global.status == 3)
-                    {
-                        Global.layout.AddView(unstableLayout);
-                    }
+                    Global.layout.AddView(unstableLayout);
                 }
                 catch { };
             }));
@@ -1251,6 +1272,8 @@ namespace Main
 
         private void LoadEditViews(string name, int value)
         {
+            Global.currentView = 2;
+
             CurrentName = name;
             CurrentValue = value;
 
@@ -1402,7 +1425,7 @@ namespace Main
             return (int)(((float)System.Int32.Parse(editPressureText) - Constants.PRESSURESETMIN) / (Constants.PRESSURESETMAX - Constants.PRESSURESETMIN) * 100);
         }
 
-        private Int32 ConvertDataOut(int targetPressure, bool forceIdle = false)
+        private UInt32 ConvertDataOut(int targetPressure, bool forceIdle = false)
         {
             // Array to hold data, in bytes.
             byte[] dataBytes = new byte[4];
@@ -1449,7 +1472,7 @@ namespace Main
             dataBytes[3] = 0xFF;
 
             // Convert data to Int32.
-            Int32 output = BitConverter.ToInt32(dataBytes, 0);
+            UInt32 output = (UInt32)BitConverter.ToInt32(dataBytes, 0);
 
             return output;
         }
@@ -1501,12 +1524,13 @@ namespace Main
             // Convert from UART value to actual pressure value.
             int pressureIn = ConvertUARTIn(currentPressureUART);
             
-            if (true)
+            if (pressureIn > 0)
             {
                 Global.currentPressure = pressureIn;
             }
             else
             {
+                // Do not set status flags on wierd reads.
                 return;
             }
 
@@ -1641,7 +1665,7 @@ namespace Main
             }
         }
 
-        public bool Write(Int32 output)
+        public bool Write(UInt32 output)
         {
             // Returns true if Write operation is successful; returns false otherwise.
 
@@ -1875,9 +1899,20 @@ namespace Main
             return input;
         }
 
-        public bool Write(Int32 output)
+        public bool Write(UInt32 output)
         {
             // Returns true if Write operation is successful; returns false otherwise.
+
+            // Write 0x0000 if target has not been set.
+            if (Global.targetPressure == 0)
+            {
+                output = 0;
+
+                if (Global.forceIdle)
+                {
+                    output = 0xFF010000;
+                }
+            }
 
             // Check if mDeviceControlActivity has been instantiated.
             if (mDeviceControlActivity == null)
@@ -1893,12 +1928,18 @@ namespace Main
             string properties = mGattCharacteristic.Properties.ToString();
             string uuid = mGattCharacteristic.Uuid.ToString();
 
-            mGattCharacteristic.SetValue(output, GattFormat.Uint32, 0);
+            mGattCharacteristic.SetValue((Int32)output, GattFormat.Uint32, 0);
 
             if (mBluetoothGatt.WriteCharacteristic(mGattCharacteristic))
             {
                 // Write operation successful.
                 ;
+
+                // Reset Force Idle if successful.
+                if (Global.forceIdle == true)
+                {
+                    Global.forceIdle = false;
+                }
 
                 return true;
             }

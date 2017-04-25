@@ -9,8 +9,8 @@
   <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED" />
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-  <application android:label="Main" android:name="android.app.Application" android:allowBackup="true" android:icon="@drawable/icon" android:debuggable="true">
-    <activity android:icon="@drawable/icon" android:label="BPR" android:name="md5aab1eae5a23215e87b7ffc7728e5b85b.MainActivity">
+  <application android:label="Main" android:name="android.app.Application" android:allowBackup="true" android:icon="@drawable/site-logo" android:debuggable="true">
+    <activity android:icon="@drawable/site-logo" android:label="BPR" android:name="md5aab1eae5a23215e87b7ffc7728e5b85b.MainActivity">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
