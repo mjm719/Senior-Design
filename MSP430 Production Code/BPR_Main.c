@@ -107,8 +107,6 @@ unsigned char StatusByte;			//Status Information to be sent back to the user's A
 // Make desiredPressure 0
 unsigned int desiredPressure = 0;
 unsigned char newStatus;
-unsigned char newCommand = 0;
-unsigned int lastPressureCommand = 0;
 
 #define ForceIdle			1
 #define newCO2				2
@@ -174,18 +172,19 @@ int main(void)
 	UCB0CTL1 &= ~UCSWRST;                     // Clear SW reset, resume operation
 	IE2 |= UCB0RXIE;                          // Enable RX interrupt
 
-	  DCOCTL = 0;                               	//Select lowest DCOx and MODx settings
-	  BCSCTL1 = CALBC1_1MHZ;                    	//Set DCO
-	  DCOCTL = CALDCO_1MHZ;
+	DCOCTL = 0;                               	//Select lowest DCOx and MODx settings
+	BCSCTL1 = CALBC1_1MHZ;                    	//Set DCO
+	DCOCTL = CALDCO_1MHZ;
 
-	  UCA0CTL1 |= UCSSEL_2;                     	//SMCLK
-	  UCA0BR0 = 104;                            	//1MHz 9600
-	  UCA0BR1 = 0;                              	//1MHz 9600
-	  UCA0MCTL = UCBRS0;                        	//Modulation UCBRSx = 1
-	  UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
+	UCA0CTL1 |= UCSSEL_2;                     	//SMCLK
+	UCA0BR0 = 104;                            	//1MHz 9600
+	UCA0BR1 = 0;                              	//1MHz 9600
+	UCA0MCTL = UCBRS0;                        	//Modulation UCBRSx = 1
+	UCA0CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
 
 	int count = 0;
 	int baseCase = 1;
+	unsigned int diff;
 
 	while(1){									//While true to always execute code
 
@@ -202,13 +201,10 @@ int main(void)
 
 		baseCase = 1;
 
-		// && !(StatusByte & lowCO2)			place this in the while
+		// && !(StatusByte & lowCO2) 			place this in the while
 
 		while(((currentPressure < desiredPressure - window) || (currentPressure > desiredPressure + window)) && desiredPressure){
 			baseCase = 0;
-			if(newStatus & ForceIdle){					// User has sent a command to stop pressurizing
-				break;
-			}
 			if(currentPressure < desiredPressure - window){				//Pressure is lower than the desired pressure
 				P2OUT &= ~BIT0;
 				P2OUT |= BIT2;
@@ -225,7 +221,6 @@ int main(void)
 				else{
 					StatusByte &= ~lowCO2;
 				}
-
 				count++;
 			}
 			else if(currentPressure > desiredPressure + window){					//Pressure is higher than the desired pressure
@@ -237,7 +232,7 @@ int main(void)
 			}
 
 			// Leave the valve on for 0.52 seconds
-			unsigned int diff = desiredPressure - currentPressure;
+			diff = desiredPressure - currentPressure;
 			diff = abs(diff);
 
 			if(diff > 1000){				//Large Pressure Change
@@ -264,9 +259,6 @@ int main(void)
 			sendUART();
 			getValuesUART();
 
-			//if((StatusByte & CurrentStatus0) && (StatusByte & CurrentStatus1)){
-
-			//}
 		}
 		if(baseCase){
 			wait(1);
@@ -300,6 +292,7 @@ void __attribute__ ((interrupt(USCIAB0TX_VECTOR))) USCI0TX_ISR (void)
 	}
 
 	else if (IFG2 & UCA0TXIFG){
+		TACTL = TACLR + MC_0;           			// SMCLK, contmode, interrupt
 		UCA0TXBUF = UART_TX[i++];                 // TX next character
 		if (i == sizeof UART_TX){                  // TX over?
 			IE2 &= ~UCA0TXIE;                       // Disable USCI_A0 TX interrupt
@@ -325,7 +318,6 @@ void __attribute__ ((interrupt(USCIAB0RX_VECTOR))) USCI0RX_ISR (void)
 		IE2 &= ~UCA0RXIE;                       // Disable USCI_A0 RX interrupt
 		__bic_SR_register_on_exit(CPUOFF);      //Exit LPM0
 	}
-
 }
 
 // Timer_A3 Interrupt Vector (TA0IV) handler
@@ -358,6 +350,7 @@ void getPressure(void){
 	__bis_SR_register(CPUOFF + GIE);        // Enter LPM0 w/ interrupts
 											// Remain in LPM0 until all data
 											// is RX'd
+	TACTL = TACLR + MC_0;           		// SMCLK, contmode, interrupt
 }
 
 void sendUART(void){
@@ -365,15 +358,17 @@ void sendUART(void){
 	  i = 0;
 	  j = 0;
 	  IE2 |= UCA0TXIE;                        // Enable USCI_A0 TX interrupt
+	  TACTL = TASSEL_2 + ID_3 + MC_2 + TAIE;  // SMCLK, contmode, interrupt
 	  __bis_SR_register(LPM0_bits + GIE);       // Enter LPM0, interrupts enabled
+	  TACTL = TACLR + MC_0;           			// SMCLK, contmode, interrupt
 
 	  //Wait for 2 cycles of .52 seconds
-	  wait(2);
+	  //wait(2);				// This may be needed
 }
 
 void postPressure(void){
 	msbPressure = RxBuffer[0];
-	if ((msbPressure & 128) && (msbPressure & 64)){
+	if (((msbPressure & 128) && (msbPressure & 64)) || currentPressure == 0){
 		StatusByte |= SensorFailure;
 	}
 	else{
@@ -383,18 +378,10 @@ void postPressure(void){
 	UART_TX[0] = RxBuffer[1];
 	UART_TX[1] = RxBuffer[0];
 	UART_TX[2] = StatusByte;
-
-	if (currentPressure == 0){
-		P1OUT |= BIT0;
-	}
-	else{
-		P1OUT &= BIT0;
-	}
 }
 
 void getValuesUART(void){
 	if(UART_RX[0] || UART_RX[1]){
-		//lastPressureCommand = desiredPressure;
 		// Check to see if the data sent shifted one over to the right by checking the error check for shift of FF
 		if(UART_RX[0] == 0xFF){
 			desiredPressure = (UART_RX[2] << 8 | UART_RX[1]);
@@ -405,13 +392,12 @@ void getValuesUART(void){
 			newStatus = UART_RX[2];
 		}
 	}
-	//memset(UART_RX, 0, 4);			//Probably not needed
 	if(newStatus & newCO2){
 		StatusByte &= ~lowCO2;
 	}
-	//if(desiredPressure != lastPressureCommand){
-		//newCommand = 1;
-	//}
+	if(newStatus & ForceIdle){
+		desiredPressure = currentPressure;
+	}
 }
 
 void wait(unsigned int waitCount){
