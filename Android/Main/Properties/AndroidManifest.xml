@@ -1,10 +1,10 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="Main.Main" android:versionCode="1" android:versionName="1.0.1" android:installLocation="auto">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="Main.Main" android:versionCode="1" android:installLocation="auto" android:versionName="Version 1.00">
 	<uses-sdk android:minSdkVersion="23" />
 	<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 	<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 	<uses-permission android:name="android.permission.BLUETOOTH" />
 	<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
 	<uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED" />
-	<application android:label="Main"></application>
+	<application android:label="Main" android:icon="@drawable/Icon"></application>
 </manifest>

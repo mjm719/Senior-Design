@@ -14,7 +14,7 @@ public final class R {
         public static final int icon=0x7f020000;
         public static final int icon_add=0x7f020001;
         public static final int icon_back=0x7f020002;
-        public static final int icon_bike_tire_white=0x7f020003;
+        public static final int icon_bike_tire=0x7f020003;
         public static final int icon_delete=0x7f020004;
         public static final int icon_edit=0x7f020005;
     }

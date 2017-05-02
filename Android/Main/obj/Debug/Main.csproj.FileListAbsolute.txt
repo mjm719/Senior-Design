@@ -51,10 +51,8 @@ C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\android\bin\Main.Main.apk
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\res\layout\main.xml
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\res\values\strings.xml
-C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\res\drawable\icon.png
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\res\drawable\icon_add.png
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\res\drawable\icon_back.png
-C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\res\drawable\icon_bike_tire_white.png
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\res\drawable\icon_delete.png
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\res\drawable\icon_edit.png
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\R.cs.flag
@@ -83,6 +81,7 @@ C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\android\assets\System.ServiceModel.Internals.dll.mdb
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\android\assets\System.Xml.dll.mdb
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\android\assets\System.Xml.Linq.dll.mdb
-C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\res\drawable\site-logo.png
+C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\res\drawable\icon.png
+C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\res\drawable\icon_bike_tire.png
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\obj\Debug\Main.dll.mdb
 C:\Users\Alden\Documents\Visual Studio 2013\Projects\Senior-Design\Android\Main\bin\Debug\Main.dll.mdb

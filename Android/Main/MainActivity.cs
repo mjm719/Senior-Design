@@ -1,4 +1,12 @@
-﻿using Android;
+﻿// BPR Mobile Application © 2017
+// Version 1.00
+
+// Latest Updates:
+// - Completed base application prototype for Senior Design I.
+
+#region Libraries
+
+using Android;
 using Android.App;
 using Android.Bluetooth;
 using Android.Bluetooth.LE;
@@ -19,6 +27,22 @@ using System.Threading.Tasks;
 using System.Timers;
 using Android.Runtime;
 
+#endregion
+
+#region References
+
+// Bluetooth Connectivity:
+// https://developer.android.com/guide/topics/connectivity/bluetooth.html
+// https://developer.android.com/guide/topics/connectivity/bluetooth-le.html
+
+// Requesting Permissions:
+// https://github.com/jamesmontemagno/MarshmallowSamples/blob/master/RuntimePermissions/MarshmallowPermission/MainActivity.cs
+
+// Refresh Timers:
+// http://stackoverflow.com/questions/13019433/calling-method-on-every-x-minutes
+
+#endregion
+
 namespace Main
 {
     public static class Constants
@@ -34,6 +58,7 @@ namespace Main
         public const int PERIOD = 250;
         public const int READWAIT = 100;
 
+        public const int REQUEST_LOCATION_ID = 0;
         public const int REQUEST_ENABLE_BT = 1;
 
         public const string LIST_NAME = "NAME";
@@ -106,7 +131,7 @@ namespace Main
         }
     }
 
-    [Activity(Label = "BPR", MainLauncher = true, Icon = "@drawable/Site-logo")]
+    [Activity(Label = "BPR", MainLauncher = true, Icon = "@drawable/Icon")]
     public class MainActivity : Activity
     {
         static float widthInDp;
@@ -293,7 +318,7 @@ namespace Main
 
             loadingWheel1 = new ImageView(this);
             loadingScreenLayout2.AddView(loadingWheel1);
-            loadingWheel1.SetBackgroundResource(Resources.GetIdentifier("icon_bike_tire_white", "drawable", PackageName));
+            loadingWheel1.SetBackgroundResource(Resources.GetIdentifier("icon_bike_tire", "drawable", PackageName));
             loadingWheel1.LayoutParameters.Width = (int)(Resources.DisplayMetrics.HeightPixels * 0.125);
             loadingWheel1.LayoutParameters.Height = (int)(Resources.DisplayMetrics.HeightPixels * 0.125);
 
@@ -500,12 +525,10 @@ namespace Main
             #endregion
 
             #endregion
-
+            
             LoadLoadingViews();
 
             #region Initialize Timers
-
-            // http://stackoverflow.com/questions/13019433/calling-method-on-every-x-minutes
 
             // Loading Screen Timers.
             loadingDots = new System.Threading.Timer(x => LoadingDots(), null, 0, 250);
@@ -552,8 +575,6 @@ namespace Main
             Manifest.Permission.AccessFineLocation
         };
 
-        const int RequestLocationId = 0;
-
         public void GetLocationPermission()
         {
             const string permission = Manifest.Permission.AccessFineLocation;
@@ -569,7 +590,7 @@ namespace Main
             // Requesting permissions...
             Global.loadText = "Requesting permissions...";
             Global.loadingProgressDialog.Progress = 25;
-            RequestPermissions(PermissionsLocation, RequestLocationId);
+            RequestPermissions(PermissionsLocation, Constants.REQUEST_LOCATION_ID);
         }
 
         private void LoadingDots()
@@ -666,14 +687,6 @@ namespace Main
                     {
                         statusView.Text = "Error: Check pressure sensor.";
                         statusView.SetTextColor(Android.Content.Res.ColorStateList.ValueOf(Android.Graphics.Color.Red));
-
-                        /*
-                        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-                        builder.SetMessage("CO2 cartridge is empty! Replace to continue pressurizing.");
-                        builder.SetCancelable(false);
-                        */
-
-                        ;
                     }
                     catch { };
                 }));
@@ -686,14 +699,6 @@ namespace Main
                     {
                         statusView.Text = "Error: Replace CO2 cartridge.";
                         statusView.SetTextColor(Android.Content.Res.ColorStateList.ValueOf(Android.Graphics.Color.Red));
-
-                        /*
-                        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-                        builder.SetMessage("CO2 cartridge is empty! Replace to continue pressurizing.");
-                        builder.SetCancelable(false);
-                        */
-
-                        ;
                     }
                     catch { };
                 }));
@@ -832,7 +837,6 @@ namespace Main
                 if (mReceiver.Write(ConvertDataOut(Global.targetPressure, Global.forceIdle)))
                 {
                     // Write operation successful.
-                    ;
 
                     // On first successful write, load Main Views.
                     if (Global.isConnected)
@@ -845,7 +849,6 @@ namespace Main
                 else
                 {
                     // Write operation failed.
-                    ;
                 }
             }
         }
@@ -1133,8 +1136,6 @@ namespace Main
             ImageButton deleteButton = (ImageButton)Global.Presets[i - 1].FindViewWithTag(deleteTag);
             deleteButton.Click += DeleteButtonClick;
             Global.DeleteButtons.Add(deleteButton);
-
-            LoadMainViews();
         }
 
         private void LoadLoadingViews()
@@ -1158,8 +1159,6 @@ namespace Main
 
                 Global.layout.RemoveView(addButton);
                 Global.layout.RemoveView(unstableLayout);
-
-                ;
             }
             catch { };
 
@@ -1835,8 +1834,6 @@ namespace Main
             base.OnCharacteristicChanged(gatt, characteristic);
 
             rData = characteristic.GetValue();
-
-            ;
         }
 
         private void BroadcastUpdate(string action, BluetoothGattCharacteristic characteristic)
@@ -1887,13 +1884,10 @@ namespace Main
 
                 // Return the data received from callback.
                 input = this.rData;
-
-                ;
             }
             else
             {
                 // Read operation failed.
-                ;
             }
 
             return input;
@@ -1918,7 +1912,6 @@ namespace Main
             if (mDeviceControlActivity == null)
             {
                 // mDeviceControlActivity was not instantiated.
-                ;
 
                 return false;
             }
@@ -1933,7 +1926,6 @@ namespace Main
             if (mBluetoothGatt.WriteCharacteristic(mGattCharacteristic))
             {
                 // Write operation successful.
-                ;
 
                 // Reset Force Idle if successful.
                 if (Global.forceIdle == true)
@@ -1946,7 +1938,6 @@ namespace Main
             else
             {
                 // Write operation failed.
-                ;
 
                 return false;
             }
@@ -2034,8 +2025,6 @@ namespace Main
                 mGattCharacteristics.Add(charas);
                 gattCharacteristicData.Add(gattCharacteristicGroupData);
             }
-
-            ;
         }
     }
 }
